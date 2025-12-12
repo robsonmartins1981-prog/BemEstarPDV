@@ -12,22 +12,25 @@ import NFeImport from './NFeImport';
 import InventoryReport from './InventoryReport';
 import CustomerManagement from './CustomerManagement';
 import ProductFormPage from './ProductFormPage';
-import CustomerFormPage from './CustomerFormPage'; // Importa a nova página
-import CategoryFormPage from './CategoryFormPage'; // Importa a nova página
-import GenerateOrder from './GenerateOrder'; // Importa o novo módulo
+import CustomerFormPage from './CustomerFormPage'; 
+import CategoryFormPage from './CategoryFormPage'; 
+import GenerateOrder from './GenerateOrder'; 
+import ExpenseManagement from './ExpenseManagement'; // Importa novo componente
+import ExpenseFormPage from './ExpenseFormPage'; // Importa novo componente
 
 interface ERPScreenProps {
     setView: (view: 'pos' | 'erp' | 'crm' | 'fiscal') => void;
 }
 
-type ActiveModule = 'products' | 'categories' | 'customers' | 'suppliers' | 'financial' | 'reports' | 'nfeImport' | 'inventory' | 'generateOrder';
+type ActiveModule = 'products' | 'categories' | 'customers' | 'suppliers' | 'financial' | 'expenses' | 'reports' | 'nfeImport' | 'inventory' | 'generateOrder';
 
 // Novo tipo para controlar a visualização dentro do ERP
 type ERPView = 
   | { type: 'module', id: ActiveModule }
   | { type: 'product_form', productId?: string }
   | { type: 'customer_form', customerId?: string }
-  | { type: 'category_form', categoryId?: string };
+  | { type: 'category_form', categoryId?: string }
+  | { type: 'expense_form', expenseId?: string }; // Adicionado novo tipo de form
 
 
 // Estrutura do menu refatorada com módulos agrupados
@@ -77,6 +80,7 @@ const menuModules: MenuModule[] = [
         icon: BarChart,
         items: [
             { id: 'financial', label: 'Visão Geral' },
+            { id: 'expenses', label: 'Contas a Pagar' }, // Novo item de menu
         ],
     },
     {
@@ -92,7 +96,7 @@ const menuModules: MenuModule[] = [
 // Componente principal para a tela de Retaguarda (ERP).
 const ERPScreen: React.FC<ERPScreenProps> = ({ setView }) => {
     const [currentErpView, setCurrentErpView] = useState<ERPView>({ type: 'module', id: 'products' });
-    const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['estoque', 'compras']));
+    const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['estoque', 'compras', 'financeiro']));
     const [categories, setCategories] = useState<Category[]>([]);
 
     useEffect(() => {
@@ -126,6 +130,11 @@ const ERPScreen: React.FC<ERPScreenProps> = ({ setView }) => {
                     categoryId={currentErpView.categoryId} 
                     onBack={() => setCurrentErpView({ type: 'module', id: 'categories' })} 
                 />;
+            case 'expense_form': // Renderiza o form de despesa
+                return <ExpenseFormPage 
+                    expenseId={currentErpView.expenseId} 
+                    onBack={() => setCurrentErpView({ type: 'module', id: 'expenses' })} 
+                />;
             case 'module':
                 switch(currentErpView.id) {
                     case 'products':
@@ -143,6 +152,11 @@ const ERPScreen: React.FC<ERPScreenProps> = ({ setView }) => {
                             onNewCustomer={() => setCurrentErpView({ type: 'customer_form' })}
                             onEditCustomer={(id) => setCurrentErpView({ type: 'customer_form', customerId: id })}
                         />;
+                    case 'expenses': // Renderiza a lista de despesas
+                        return <ExpenseManagement 
+                            onNewExpense={() => setCurrentErpView({ type: 'expense_form' })}
+                            onEditExpense={(id) => setCurrentErpView({ type: 'expense_form', expenseId: id })}
+                        />;
                     case 'nfeImport': return <NFeImport />;
                     case 'generateOrder': return <GenerateOrder />;
                     case 'inventory': return <InventoryReport />;
@@ -157,6 +171,7 @@ const ERPScreen: React.FC<ERPScreenProps> = ({ setView }) => {
             case 'product_form': return { title: currentErpView.productId ? 'Editar Produto' : 'Novo Produto', activeModule: 'products' as ActiveModule, backAction: () => setCurrentErpView({ type: 'module', id: 'products' }) };
             case 'customer_form': return { title: currentErpView.customerId ? 'Editar Cliente' : 'Novo Cliente', activeModule: 'customers' as ActiveModule, backAction: () => setCurrentErpView({ type: 'module', id: 'customers' }) };
             case 'category_form': return { title: currentErpView.categoryId ? 'Editar Categoria' : 'Nova Categoria', activeModule: 'categories' as ActiveModule, backAction: () => setCurrentErpView({ type: 'module', id: 'categories' }) };
+            case 'expense_form': return { title: currentErpView.expenseId ? 'Editar Despesa' : 'Nova Conta a Pagar', activeModule: 'expenses' as ActiveModule, backAction: () => setCurrentErpView({ type: 'module', id: 'expenses' }) };
             case 'module':
             default:
                 const label = menuModules.flatMap(m => m.items).find(i => i.id === currentErpView.id)?.label || 'Dashboard';
