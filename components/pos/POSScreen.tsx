@@ -335,14 +335,14 @@ const POSScreen: React.FC<POSScreenProps> = ({ setView }) => {
                             value={initialAmount}
                             onChange={(e) => setInitialAmount(e.target.value)}
                             placeholder="0,00"
-                            className="w-full pl-10 pr-4 py-3 border-2 border-gray-200 dark:border-gray-700 rounded-xl shadow-sm focus:ring-theme-primary focus:border-theme-primary bg-gray-50 dark:bg-gray-700 text-2xl text-right font-mono"
+                            className="w-full pl-10 pr-4 py-3 border-2 border-gray-200 dark:border-gray-700 rounded-xl focus:ring-theme-primary focus:border-theme-primary bg-gray-50 dark:bg-gray-700 text-2xl text-right font-mono"
                             autoFocus
                         />
                     </div>
                     {openError && <p className="mt-2 text-sm text-red-600 font-medium">{openError}</p>}
                 </div>
 
-                <Button type="submit" className="w-full text-lg py-4 rounded-xl shadow-lg" variant="primary">
+                <Button type="submit" className="w-full text-lg py-4 rounded-xl" variant="primary">
                     Abrir {selectedShift}
                 </Button>
             </form>

@@ -164,7 +164,7 @@ const ERPScreen: React.FC<ERPScreenProps> = ({ setView }) => {
                                         {module.items.map(item => (
                                             <li key={item.id} className="inline-block md:block">
                                                 <a href="#" onClick={(e) => { e.preventDefault(); setCurrentErpView({ type: 'module', id: item.id }); }} 
-                                                    className={`flex items-center gap-2 px-3 py-2 md:px-4 rounded-xl text-sm font-bold transition-all border md:border-0 ${activeModule === item.id ? 'bg-theme-primary text-white shadow-lg' : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100 dark:bg-gray-700 dark:text-gray-300'}`}>
+                                                    className={`flex items-center gap-2 px-3 py-2 md:px-4 rounded-xl text-sm font-bold transition-all border md:border-0 ${activeModule === item.id ? 'bg-theme-primary text-white' : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100 dark:bg-gray-700 dark:text-gray-300'}`}>
                                                     <span>{item.label}</span>
                                                 </a>
                                             </li>

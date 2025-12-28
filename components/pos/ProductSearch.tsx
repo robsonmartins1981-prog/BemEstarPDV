@@ -211,7 +211,7 @@ const ProductSearch: React.FC<ProductSearchProps> = ({ onAddProduct }) => {
             />
             <div className="flex gap-3 mt-6 w-full max-w-xs">
                 <button onClick={resetSearch} className="flex-1 py-3 rounded-xl bg-gray-100 dark:bg-gray-700 font-bold">Cancelar</button>
-                <button onClick={handleConfirmBulk} className="flex-1 py-3 rounded-xl bg-theme-primary text-white font-bold shadow-lg shadow-theme-primary/30">Confirmar</button>
+                <button onClick={handleConfirmBulk} className="flex-1 py-3 rounded-xl bg-theme-primary text-white font-bold">Confirmar</button>
             </div>
         </div>
       )}

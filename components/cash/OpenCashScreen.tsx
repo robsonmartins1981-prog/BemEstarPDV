@@ -97,7 +97,7 @@ const OpenCashScreen: React.FC<OpenCashScreenProps> = ({ onOpen }) => {
             {error && <p className="mt-2 text-xs text-red-600 font-bold text-center uppercase tracking-wide">{error}</p>}
           </div>
 
-          <Button type="submit" className="w-full text-lg py-5 rounded-2xl shadow-xl shadow-theme-primary/20 font-black uppercase tracking-widest" variant="primary">
+          <Button type="submit" className="w-full text-lg py-5 rounded-2xl font-black uppercase tracking-widest" variant="primary">
             Iniciar {selectedShift}
           </Button>
         </form>

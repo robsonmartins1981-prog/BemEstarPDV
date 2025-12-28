@@ -72,13 +72,13 @@ const CashOperationsModal: React.FC<CashOperationsModalProps> = ({ isOpen, onClo
         <div className="flex gap-2 rounded-xl bg-gray-100 dark:bg-gray-900 p-1">
           <button
             onClick={() => setOperationType('SANGRIA')}
-            className={`w-full py-3 px-4 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${operationType === 'SANGRIA' ? 'bg-red-500 text-white shadow-lg' : 'text-gray-500 dark:text-gray-400'}`}
+            className={`w-full py-3 px-4 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${operationType === 'SANGRIA' ? 'bg-red-500 text-white' : 'text-gray-500 dark:text-gray-400'}`}
           >
             Sangria
           </button>
           <button
             onClick={() => setOperationType('REFORCO')}
-            className={`w-full py-3 px-4 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${operationType === 'REFORCO' ? 'bg-theme-primary text-white shadow-lg' : 'text-gray-500 dark:text-gray-400'}`}
+            className={`w-full py-3 px-4 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${operationType === 'REFORCO' ? 'bg-theme-primary text-white' : 'text-gray-500 dark:text-gray-400'}`}
           >
             Reforço
           </button>
