@@ -1,11 +1,10 @@
 
-
 import React, { useState, useCallback, useMemo } from 'react';
 import { db } from '../../services/databaseService';
 import type { Product, Supplier, InventoryLot, Expense, NFeData, NFeItem, NFeItemStatus } from '../../types';
 import Button from '../shared/Button';
 import ProductLinkModal from './ProductLinkModal';
-import { Upload, Link, PlusCircle, CheckCircle, AlertTriangle, ChevronsRight, X, FileQuestion, BadgeCheck, Pencil } from 'lucide-react';
+import { Upload, Link, PlusCircle, CheckCircle, AlertTriangle, ChevronsRight, X, FileQuestion, BadgeCheck, Pencil, ArrowRight } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 // --- FUNÇÕES UTILITÁRIAS ---
@@ -60,7 +59,6 @@ const NFeImport: React.FC = () => {
 
         try {
             const allDbProducts = await db.getAll('products');
-            // Explicitly type the Maps to ensure foundProduct is typed as Product | undefined
             const productMapById = new Map<string, Product>(allDbProducts.map(p => [p.id, p]));
             const productMapByNormalizedName = new Map<string, Product>(allDbProducts.map(p => [normalizeProductName(p.name), p]));
             
@@ -175,7 +173,7 @@ const NFeImport: React.FC = () => {
         itemToUpdate.linkedProductDetails = linkedProduct;
         
         setNfeData({ ...nfeData, items: newItems });
-        setLinkingItem(null); // Close modal
+        setLinkingItem(null); 
     };
     
     const handleConfirmImport = async () => {
@@ -195,23 +193,21 @@ const NFeImport: React.FC = () => {
             const suppliersStore = tx.objectStore('suppliers');
             const expensesStore = tx.objectStore('expenses');
             
-            // 1. Processar fornecedor (usando o novo índice 'cnpj')
             let supplierId = '';
+            // Buscamos pelo índice de CNPJ
             const existingSupplier = await suppliersStore.index('cnpj').get(nfeData.supplier.cnpj!);
             if (existingSupplier) {
                 supplierId = existingSupplier.id;
             } else {
                 supplierId = uuidv4();
-                await suppliersStore.add({ id: supplierId, cnpj: nfeData.supplier.cnpj!, name: nfeData.supplier.name! });
+                // Usamos put para garantir idempotência caso ocorra retry do Job
+                await suppliersStore.put({ id: supplierId, cnpj: nfeData.supplier.cnpj!, name: nfeData.supplier.name! });
             }
 
-            // 2. Processar produtos e lotes
             for (const item of nfeData.items) {
                 let productToUpdate: Product | undefined;
 
                 if (item.status === 'NEW') {
-                    // CORREÇÃO DO ERRO "Key already exists":
-                    // Verifica se o produto já existe antes de tentar adicioná-lo.
                     const existingProduct = await productsStore.get(item.code);
                     if (existingProduct) {
                          productToUpdate = existingProduct;
@@ -219,14 +215,14 @@ const NFeImport: React.FC = () => {
                         const newProduct: Product = {
                             id: item.code,
                             name: item.name,
-                            price: item.unitPrice * 1.5, // Sugestão de preço de venda
+                            price: item.unitPrice * 1.5,
                             costPrice: item.unitPrice / item.conversionFactor,
                             isBulk: false,
-                            stock: 0, // Será atualizado pelo lote
+                            stock: 0,
                             ncm: item.ncm,
                             image: 'https://picsum.photos/seed/newproduct/200'
                         };
-                        await productsStore.add(newProduct);
+                        await productsStore.put(newProduct);
                         productToUpdate = newProduct;
                     }
                 } else if (item.status === 'LINKED') {
@@ -239,11 +235,13 @@ const NFeImport: React.FC = () => {
 
                     productToUpdate.costPrice = convertedUnitPrice;
                     productToUpdate.stock = (productToUpdate.stock || 0) + convertedQuantity;
+                    productToUpdate.supplierId = supplierId; 
                     await productsStore.put(productToUpdate);
 
-                    await lotsStore.add({
+                    await lotsStore.put({
                         id: uuidv4(),
                         productId: productToUpdate.id,
+                        supplierId: supplierId,
                         quantity: convertedQuantity,
                         entryDate: new Date(),
                         expirationDate: new Date(item.expirationDate),
@@ -252,7 +250,7 @@ const NFeImport: React.FC = () => {
                 }
             }
             
-            await expensesStore.add({
+            await expensesStore.put({
                 id: uuidv4(),
                 description: `Compra NF-e - Fornecedor: ${nfeData.supplier.name}`,
                 amount: nfeData.totalAmount,
@@ -267,7 +265,7 @@ const NFeImport: React.FC = () => {
 
         } catch(err) {
             console.error("Erro detalhado na importação:", err);
-            setError(`Falha na importação: ${(err as Error).message}. Verifique o console para mais detalhes.`);
+            setError(`Falha na importação: ${(err as Error).message}`);
         } finally {
             setIsLoading(false);
         }
@@ -275,7 +273,6 @@ const NFeImport: React.FC = () => {
     
     const unlinkedCount = useMemo(() => nfeData?.items.filter(i => i.status === 'UNLINKED').length || 0, [nfeData]);
 
-    // Lógica para o "Selecionar Todos"
     const unlinkedIndices = useMemo(() => {
         if (!nfeData) return [];
         return nfeData.items
@@ -299,8 +296,8 @@ const NFeImport: React.FC = () => {
     const handleConversionFactorChange = (index: number, factor: string) => {
         if (!nfeData) return;
         const newItems = [...nfeData.items];
-        const newFactor = parseInt(factor, 10);
-        newItems[index].conversionFactor = isNaN(newFactor) || newFactor < 1 ? 1 : newFactor;
+        const newFactor = parseFloat(factor.replace(',', '.'));
+        newItems[index].conversionFactor = isNaN(newFactor) || newFactor <= 0 ? 1 : newFactor;
         setNfeData({ ...nfeData, items: newItems });
     };
 
@@ -308,7 +305,7 @@ const NFeImport: React.FC = () => {
         <div className="space-y-6">
             <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
                 <h2 className="text-xl font-bold mb-2">Importar Compra (NF-e XML)</h2>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Carregue o arquivo para dar entrada automática nos produtos, atualizar o estoque e lançar a fatura no contas a pagar.</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Carregue o arquivo para dar entrada automática nos produtos e converter unidades de compra para venda.</p>
                 <div className="flex items-center gap-4">
                      <label htmlFor="xml-upload" className="flex-grow cursor-pointer">
                         <div className="flex items-center justify-center w-full px-4 py-3 text-center border-2 border-dashed rounded-lg border-gray-300 dark:border-gray-600 hover:border-theme-primary dark:hover:border-theme-primary transition-colors">
@@ -327,23 +324,17 @@ const NFeImport: React.FC = () => {
 
             {nfeData && (
                 <div className="bg-white dark:bg-gray-800 rounded-lg shadow">
-                    <div className="p-4 border-b dark:border-gray-700 space-y-2">
+                    <div className="p-4 border-b dark:border-gray-700">
                         <div className="flex justify-between items-center">
                             <h3 className="text-lg font-semibold">Itens da Nota Fiscal ({nfeData.items.length})</h3>
-                             <div className="text-sm">
-                                <strong>Fornecedor:</strong> {nfeData.supplier.name} | <strong>Total:</strong> {formatCurrency(nfeData.totalAmount)}
+                             <div className="text-sm bg-gray-100 dark:bg-gray-700 px-3 py-1 rounded-md">
+                                <strong>Fornecedor:</strong> {nfeData.supplier.name}
                             </div>
                         </div>
-                        {unlinkedCount > 0 && (
-                            <div className="flex items-center justify-between p-2 bg-yellow-50 dark:bg-yellow-900/40 rounded-md">
-                                <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                                    <strong className="font-semibold">{unlinkedCount} item(ns)</strong> precisam de sua atenção.
-                                </p>
-                                <Button size="sm" variant="secondary" onClick={handleBatchMarkAsNew} disabled={selectedItems.size === 0}>
-                                    <PlusCircle size={16} className="mr-1"/> Marcar Selecionados como Novos
-                                </Button>
-                            </div>
-                        )}
+                        <div className="mt-2 text-xs text-gray-500 flex items-center gap-2">
+                            <AlertTriangle size={14} className="text-yellow-600"/>
+                            <span>O <strong>Fator de Conversão</strong> define quantas unidades de venda existem em 1 unidade de compra da nota. (Ex: 1 Cx c/ 12 un -> Fator: 12)</span>
+                        </div>
                     </div>
                     
                     <div className="overflow-auto">
@@ -356,57 +347,66 @@ const NFeImport: React.FC = () => {
                                             checked={areAllSelected}
                                             onChange={handleSelectAllChange}
                                             disabled={unlinkedIndices.length === 0}
-                                            title="Selecionar todos os itens não vinculados"
                                             className="cursor-pointer"
                                         />
                                     </th>
-                                    <th className="p-2 text-left">Item da NFe</th>
-                                    <th className="p-2 text-center w-28">Fator Conv.</th>
-                                    <th className="p-2 text-left">Entrada Estoque</th>
+                                    <th className="p-2 text-left">Item na NF-e (Fornecedor)</th>
+                                    <th className="p-2 text-center w-32">Fator de Conversão</th>
+                                    <th className="p-2 text-left">Resumo Entrada Estoque</th>
                                     <th className="p-2 text-center">Status</th>
-                                    <th className="p-2 text-left">Produto no Sistema</th>
+                                    <th className="p-2 text-left">Vínculo no Sistema</th>
                                     <th className="p-2 text-center">Ações</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {nfeData.items.map((item, index) => {
-                                    const stockEntry = item.quantity * item.conversionFactor;
+                                    const stockEntryQty = item.quantity * item.conversionFactor;
                                     const newCostPrice = item.unitPrice / item.conversionFactor;
+                                    const targetUnit = item.linkedProductDetails?.isBulk ? 'kg' : 'un';
+
                                     return (
-                                    <tr key={index} className="border-b dark:border-gray-700">
+                                    <tr key={index} className="border-b dark:border-gray-700 hover:bg-gray-50/50 dark:hover:bg-gray-700/20">
                                         <td className="p-2 text-center">
                                             {item.status === 'UNLINKED' && (
                                                 <input type="checkbox" checked={selectedItems.has(index)} onChange={() => handleSelectionChange(index)} className="cursor-pointer"/>
                                             )}
                                         </td>
                                         <td className="p-2">
-                                            <p className="font-semibold">{item.name}</p>
-                                            <p className="text-xs text-gray-500">
-                                                {item.quantity} un @ {formatCurrency(item.unitPrice)}
+                                            <p className="font-semibold text-xs uppercase">{item.name}</p>
+                                            <p className="text-[10px] text-gray-500">
+                                                NF: {item.quantity} un x {formatCurrency(item.unitPrice)}
                                             </p>
                                         </td>
                                          <td className="p-2 text-center">
-                                            <input
-                                                type="number"
-                                                value={item.conversionFactor}
-                                                onChange={(e) => handleConversionFactorChange(index, e.target.value)}
-                                                className="w-20 text-center bg-gray-100 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-md py-1"
-                                                min="1"
-                                                disabled={item.status === 'UNLINKED'}
-                                            />
+                                            <div className="flex flex-col items-center gap-1">
+                                                <input
+                                                    type="text"
+                                                    value={item.conversionFactor}
+                                                    onChange={(e) => handleConversionFactorChange(index, e.target.value)}
+                                                    className="w-20 text-center bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-md py-1 font-bold text-theme-primary"
+                                                    min="0.001"
+                                                    disabled={item.status === 'UNLINKED'}
+                                                />
+                                                <span className="text-[9px] text-gray-400 uppercase">Qtd x Fator</span>
+                                            </div>
                                         </td>
                                         <td className="p-2">
-                                            <p className="font-semibold">{stockEntry.toFixed(3)} un</p>
-                                            <p className="text-xs text-gray-500">
-                                                Custo: {formatCurrency(newCostPrice)}/un
-                                            </p>
+                                            <div className="flex items-center gap-2">
+                                                <ArrowRight size={14} className="text-gray-400"/>
+                                                <div>
+                                                    <p className="font-bold text-theme-primary">{stockEntryQty.toFixed(3)} {targetUnit}</p>
+                                                    <p className="text-[10px] text-gray-500">
+                                                        Custo Unit: {formatCurrency(newCostPrice)}
+                                                    </p>
+                                                </div>
+                                            </div>
                                         </td>
                                         <td className="p-2 text-center"><StatusBadge status={item.status} /></td>
                                         <td className="p-2">
                                             {item.status === 'LINKED' && item.linkedProductDetails && (
                                                 <div>
-                                                     <p className="font-semibold">{item.linkedProductDetails.name}</p>
-                                                     <p className="text-xs text-gray-500">ID: {item.linkedProductDetails.id}</p>
+                                                     <p className="font-semibold text-xs">{item.linkedProductDetails.name}</p>
+                                                     <p className="text-[10px] text-gray-400 italic">Preço Venda: {formatCurrency(item.linkedProductDetails.price)}</p>
                                                 </div>
                                             )}
                                         </td>
@@ -414,12 +414,12 @@ const NFeImport: React.FC = () => {
                                             <div className="flex justify-center gap-1">
                                                 {item.status === 'UNLINKED' && (
                                                     <>
-                                                        <Button size="sm" variant="secondary" onClick={() => handleItemStatusChange(index, 'NEW')}><PlusCircle size={14} className="mr-1"/>Marcar Novo</Button>
-                                                        <Button size="sm" variant="secondary" onClick={() => handleOpenLinkModal(item, index)}><Link size={14} className="mr-1"/>Vincular</Button>
+                                                        <Button size="sm" variant="secondary" onClick={() => handleItemStatusChange(index, 'NEW')} className="!p-1.5" title="Marcar como Novo"><PlusCircle size={14}/></Button>
+                                                        <Button size="sm" variant="secondary" onClick={() => handleOpenLinkModal(item, index)} className="!p-1.5" title="Vincular a Produto"><Link size={14}/></Button>
                                                     </>
                                                 )}
                                                 {(item.status === 'LINKED' || item.status === 'NEW') && (
-                                                     <Button size="sm" variant="secondary" onClick={() => handleItemStatusChange(index, 'UNLINKED')}><Pencil size={14} className="mr-1"/>Alterar</Button>
+                                                     <Button size="sm" variant="secondary" onClick={() => handleItemStatusChange(index, 'UNLINKED')} className="!p-1.5" title="Alterar Vínculo"><Pencil size={14}/></Button>
                                                 )}
                                             </div>
                                         </td>
@@ -429,9 +429,12 @@ const NFeImport: React.FC = () => {
                         </table>
                     </div>
 
-                    <div className="flex justify-end p-4">
+                    <div className="flex justify-between items-center p-4 bg-gray-50 dark:bg-gray-700/30">
+                        <div className="text-sm text-gray-500">
+                            Certifique-se de que todos os itens estão <strong>Vinculados</strong> ou como <strong>Novo Produto</strong>.
+                        </div>
                         <Button onClick={handleConfirmImport} variant="success" size="lg" disabled={isLoading || unlinkedCount > 0}>
-                            {isLoading ? 'Importando...' : 'Confirmar e Dar Entrada no Estoque'}
+                            {isLoading ? 'Processando...' : 'Finalizar e Atualizar Estoque'}
                         </Button>
                     </div>
                 </div>

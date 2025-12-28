@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import Modal from '../shared/Modal';
 import Button from '../shared/Button';
@@ -9,23 +10,25 @@ interface CashOperationsModalProps {
   onConfirm: (transaction: CashTransaction) => void;
 }
 
-// Componente de modal para registrar operações de Sangria e Reforço.
-// Ele é chamado a partir da tela principal do PDV.
 const CashOperationsModal: React.FC<CashOperationsModalProps> = ({ isOpen, onClose, onConfirm }) => {
-  // Estado para controlar qual tipo de operação está selecionada: Sangria ou Reforço.
   const [operationType, setOperationType] = useState<'SANGRIA' | 'REFORCO'>('SANGRIA');
-  // Estado para o valor da operação.
-  const [amount, setAmount] = useState('');
-  // Estado para a descrição/motivo da operação.
+  const [amount, setAmount] = useState('0,00');
   const [description, setDescription] = useState('');
-  // Estado para mensagens de erro.
   const [error, setError] = useState('');
 
-  // Lida com a confirmação da operação.
+  const formatCurrencyInput = (value: string) => {
+    const digits = value.replace(/\D/g, '');
+    const numberValue = parseInt(digits || '0', 10) / 100;
+    return numberValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
+  const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setAmount(formatCurrencyInput(e.target.value));
+  };
+
   const handleConfirm = () => {
-    const numericAmount = parseFloat(amount.replace(',', '.'));
+    const numericAmount = parseFloat(amount.replace(/\./g, '').replace(',', '.'));
     
-    // Validação dos campos.
     if (isNaN(numericAmount) || numericAmount <= 0) {
       setError('Valor inválido. Insira um número positivo.');
       return;
@@ -35,7 +38,6 @@ const CashOperationsModal: React.FC<CashOperationsModalProps> = ({ isOpen, onClo
       return;
     }
     
-    // Cria o objeto de transação.
     const transaction: CashTransaction = {
       type: operationType,
       amount: numericAmount,
@@ -43,13 +45,12 @@ const CashOperationsModal: React.FC<CashOperationsModalProps> = ({ isOpen, onClo
       description,
     };
     
-    onConfirm(transaction); // Chama a função de callback com a transação.
-    handleClose(); // Fecha e reseta o modal.
+    onConfirm(transaction);
+    handleClose();
   };
 
-  // Reseta o estado do modal ao fechar.
   const handleClose = () => {
-    setAmount('');
+    setAmount('0,00');
     setDescription('');
     setError('');
     onClose();
@@ -68,52 +69,49 @@ const CashOperationsModal: React.FC<CashOperationsModalProps> = ({ isOpen, onClo
       }
     >
       <div className="space-y-4">
-        {/* Seleção do tipo de operação */}
-        <div className="flex gap-2 rounded-lg bg-gray-200 dark:bg-gray-700 p-1">
+        <div className="flex gap-2 rounded-xl bg-gray-100 dark:bg-gray-900 p-1">
           <button
             onClick={() => setOperationType('SANGRIA')}
-            className={`w-full py-2 px-4 rounded-md text-sm font-semibold transition-colors ${operationType === 'SANGRIA' ? 'bg-red-500 text-white shadow' : 'text-gray-600 dark:text-gray-300'}`}
+            className={`w-full py-3 px-4 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${operationType === 'SANGRIA' ? 'bg-red-500 text-white shadow-lg' : 'text-gray-500 dark:text-gray-400'}`}
           >
-            Sangria (Retirada)
+            Sangria
           </button>
           <button
             onClick={() => setOperationType('REFORCO')}
-            className={`w-full py-2 px-4 rounded-md text-sm font-semibold transition-colors ${operationType === 'REFORCO' ? 'bg-green-500 text-white shadow' : 'text-gray-600 dark:text-gray-300'}`}
+            className={`w-full py-3 px-4 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${operationType === 'REFORCO' ? 'bg-theme-primary text-white shadow-lg' : 'text-gray-500 dark:text-gray-400'}`}
           >
-            Reforço (Adição)
+            Reforço
           </button>
         </div>
         
-        {/* Campo de Valor */}
         <div>
-          <label htmlFor="op-amount" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Valor</label>
-          <div className="relative mt-1">
-            <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500 dark:text-gray-400">R$</span>
+          <label htmlFor="op-amount" className="block text-[10px] font-black text-gray-400 uppercase mb-2 ml-1">Valor da Operação</label>
+          <div className="relative">
+            <span className="absolute inset-y-0 left-4 flex items-center text-gray-400 font-bold">R$</span>
             <input
               id="op-amount"
               type="text"
+              inputMode="numeric"
               value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              placeholder="0,00"
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-theme-primary focus:border-theme-primary bg-gray-50 dark:bg-gray-700"
+              onChange={handleAmountChange}
+              className="w-full pl-12 pr-4 py-4 border-2 border-gray-100 dark:border-gray-700 rounded-xl focus:ring-0 focus:border-theme-primary bg-gray-50 dark:bg-gray-900 text-3xl text-right font-mono font-black"
             />
           </div>
         </div>
 
-        {/* Campo de Descrição */}
         <div>
-          <label htmlFor="op-description" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Descrição / Motivo</label>
+          <label htmlFor="op-description" className="block text-[10px] font-black text-gray-400 uppercase mb-2 ml-1">Descrição / Motivo</label>
           <input
             id="op-description"
             type="text"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            className="w-full mt-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-theme-primary focus:border-theme-primary bg-gray-50 dark:bg-gray-700"
+            placeholder="Ex: Pagamento de frete, Sangria de segurança..."
+            className="w-full mt-1 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-theme-primary outline-none bg-gray-50 dark:bg-gray-800"
           />
         </div>
         
-        {/* Exibição de Erro */}
-        {error && <p className="text-sm text-red-500">{error}</p>}
+        {error && <p className="text-xs text-red-600 font-bold text-center">{error}</p>}
       </div>
     </Modal>
   );

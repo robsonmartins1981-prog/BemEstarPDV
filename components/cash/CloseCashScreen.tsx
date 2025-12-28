@@ -1,3 +1,4 @@
+
 import React, { useMemo } from 'react';
 import type { CashSession, Payment, Sale } from '../../types';
 import { PaymentMethod } from '../../types';
@@ -15,7 +16,7 @@ const COLORS = {
   [PaymentMethod.PIX]: '#9FCB3B',      // theme-green (Light Green)
   [PaymentMethod.DEBITO]: '#1E3A63',   // theme-darkblue (Navy Blue)
   [PaymentMethod.CREDITO]: '#F9B208', // theme-yellow (Mustard Yellow)
-  [PaymentMethod.FIADO]: '#ef4444',     // Red
+  [PaymentMethod.NOTINHA]: '#ef4444',     // Red
 };
 
 

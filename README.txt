@@ -21,7 +21,7 @@ Esta é a tela principal para o operador de caixa.
 
 - **Abertura de Caixa:** Antes de iniciar as vendas, o sistema exige a abertura do caixa. O operador deve informar um valor inicial (suprimento), que servirá como troco.
 - **Fechamento de Caixa:** Ao final do turno, o operador pode fechar o caixa. Uma tela de resumo detalhada é exibida, mostrando:
-  - **Resumo Financeiro:** Vendas totais, discriminadas por método de pagamento (Dinheiro, PIX, Débito, Crédito, Fiado).
+  - **Resumo Financeiro:** Vendas totais, discriminadas por método de pagamento (Dinheiro, PIX, Débito, Crédito, Notinha).
   - **Movimentações de Caixa:** Soma de todos os suprimentos/reforços e sangrias.
   - **Valor Esperado em Caixa:** O cálculo final do dinheiro que deve estar na gaveta.
   - **Gráfico Visual:** Um gráfico de barras para facilitar a visualização das vendas por método.
@@ -57,7 +57,7 @@ A tela é dividida em uma área de lançamento de produtos (esquerda/centro) e u
 ### 2.3. Janela de Pagamento (Modal)
 
 - Ativada pelo botão "PAGAR (F12)".
-- **Múltiplos Pagamentos:** Permite que uma única venda seja paga com diferentes métodos (ex: parte em dinheiro, parte em PIX).
+- **Múltiplos Pagamentos:** Permite que uma única venda seja paga com diferentes métodos (ex: parte em dinheiro, parte em PIX, parte em Notinha).
 - **Cálculo de Restante e Troco:** Mostra em tempo real o valor que ainda falta pagar ou o troco a ser devolvido.
 - **Botões de Acesso Rápido:** Para pagamentos em dinheiro, exibe botões com valores de notas comuns (ex: R$ 50,00, R$ 100,00) para agilizar o processo.
 - **Finalização da Venda:** Após o pagamento completo, finaliza a venda, limpa a tela para a próxima e **tenta emitir a NFC-e (Nota Fiscal de Consumidor Eletrônica)** através do serviço fiscal configurado.

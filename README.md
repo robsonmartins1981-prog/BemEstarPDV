@@ -31,7 +31,7 @@ Focado na agilidade do operador de caixa.
     *   **Carrinho:** Edição de quantidade, descontos por item e remoção rápida.
     *   **Cliente na Venda:** Associação rápida de cliente e inserção de CPF na nota.
     *   **Descontos:** Suporta descontos manuais (R$ ou %, com senha de gerente) e Cupons promocionais.
-    *   **Pagamento:** Múltiplos métodos na mesma venda (ex: R$ 50 em Dinheiro + Restante no Débito). Cálculo automático de troco e sugestão de cédulas.
+    *   **Pagamento:** Múltiplos métodos na mesma venda (ex: R$ 50 em Dinheiro + Restante no Débito + Notinha). Cálculo automático de troco e sugestão de cédulas.
 *   **Recursos Extras:**
     *   **Salvar Pedido (Park Sale):** Permite deixar uma venda em espera para atender outro cliente.
     *   **Fila de Sincronização:** Vendas são salvas localmente e enviadas para processamento fiscal em background.
