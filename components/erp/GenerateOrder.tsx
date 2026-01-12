@@ -113,7 +113,7 @@ const GenerateOrder: React.FC = () => {
         let printContent = `
             <html>
             <head>
-                <title>Lista de Compras - UseNatural</title>
+                <title>Lista de Compras - BemEstar</title>
                 <style>
                     body { font-family: Arial, sans-serif; padding: 20px; }
                     table { width: 100%; border-collapse: collapse; margin-top: 20px; }

@@ -1,11 +1,11 @@
 
 import React, { useState, useEffect } from 'react';
-import { ShoppingCart, Users, BarChart, FileText, Boxes, ChevronDown, ChevronUp, ArrowLeft, BrainCircuit, UserCog } from 'lucide-react';
+import { ShoppingCart, Users, BarChart, FileText, Boxes, ChevronDown, ChevronUp, ArrowLeft, BrainCircuit, Landmark, Wallet, FileCode, MapPin, Settings2 } from 'lucide-react';
 import { db } from '../../services/databaseService';
 import type { Category } from '../../types';
 import Button from '../shared/Button';
 
-// Importa os componentes de cada módulo do ERP usando caminhos relativos consistentes
+// Importa os componentes de cada módulo do ERP
 import ProductManagement from './ProductManagement';
 import CategoryManagement from './CategoryManagement';
 import NFeImport from './NFeImport';
@@ -19,12 +19,16 @@ import ExpenseManagement from './ExpenseManagement';
 import ExpenseFormPage from './ExpenseFormPage';
 import DREDashboard from './DREDashboard';
 import HRManagement from './HRManagement';
+import CashAudit from './CashAudit';
+import DeliveryZones from './DeliveryZones';
+import GeneralSettings from './GeneralSettings';
+import ValidityAlertBanner from './ValidityAlertBanner';
 
 interface ERPScreenProps {
     setView: (view: 'pos' | 'erp' | 'crm' | 'fiscal') => void;
 }
 
-type ActiveModule = 'products' | 'categories' | 'customers' | 'financial' | 'expenses' | 'reports' | 'nfeImport' | 'inventory' | 'generateOrder' | 'dre' | 'hr';
+type ActiveModule = 'products' | 'categories' | 'customers' | 'financial' | 'expenses' | 'reports' | 'nfeImport' | 'inventory' | 'generateOrder' | 'dre' | 'hr' | 'cashAudit' | 'deliveryZones' | 'generalSettings';
 
 type ERPView = 
   | { type: 'module', id: ActiveModule }
@@ -44,6 +48,7 @@ const menuModules: MenuModule[] = [
         icon: BrainCircuit,
         items: [
             { id: 'dre', label: 'Painel DRE / Lucro' },
+            { id: 'cashAudit', label: 'Controle de Caixa' },
             { id: 'hr', label: 'Equipe e RH' },
         ],
     },
@@ -54,7 +59,7 @@ const menuModules: MenuModule[] = [
         items: [
             { id: 'products', label: 'Produtos' },
             { id: 'categories', label: 'Categorias' },
-            { id: 'inventory', label: 'Inventário' },
+            { id: 'inventory', label: 'Inventário e Validade' },
         ],
     },
     {
@@ -80,11 +85,20 @@ const menuModules: MenuModule[] = [
             { id: 'expenses', label: 'Contas a Pagar' },
         ],
     },
+    {
+        id: 'configuracoes',
+        label: 'Configurações',
+        icon: Settings2,
+        items: [
+            { id: 'generalSettings', label: 'Geral e WhatsApp' },
+            { id: 'deliveryZones', label: 'Bairros e Fretes' },
+        ],
+    },
 ];
 
 const ERPScreen: React.FC<ERPScreenProps> = ({ setView }) => {
     const [currentErpView, setCurrentErpView] = useState<ERPView>({ type: 'module', id: 'dre' }); 
-    const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['estrategico', 'estoque', 'financeiro']));
+    const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['estrategico', 'estoque', 'financeiro', 'configuracoes']));
     const [categories, setCategories] = useState<Category[]>([]);
 
     useEffect(() => {
@@ -110,7 +124,10 @@ const ERPScreen: React.FC<ERPScreenProps> = ({ setView }) => {
                 switch(currentErpView.id) {
                     case 'dre': return <DREDashboard />;
                     case 'hr': return <HRManagement />;
-                    case 'products': return <ProductManagement onNewProduct={() => setCurrentErpView({ type: 'product_form' })} onEditProduct={(id) => setCurrentErpView({ type: 'product_form', productId: id })} />;
+                    case 'cashAudit': return <CashAudit />;
+                    case 'deliveryZones': return <DeliveryZones />;
+                    case 'generalSettings': return <GeneralSettings />;
+                    case 'products': return <ProductManagement onNewProduct={() => setCurrentErpView({ type: 'product_form' })} onEditProduct={(id) => setCurrentErpView({ type: 'product_form', productId: id })} onImportXML={() => setCurrentErpView({ type: 'module', id: 'nfeImport' })} />;
                     case 'categories': return <CategoryManagement onNewCategory={() => setCurrentErpView({ type: 'category_form' })} onEditCategory={(id) => setCurrentErpView({ type: 'category_form', categoryId: id })} />;
                     case 'customers': return <CustomerManagement onNewCustomer={() => setCurrentErpView({ type: 'customer_form' })} onEditCustomer={(id) => setCurrentErpView({ type: 'customer_form', customerId: id })} />;
                     case 'expenses': return <ExpenseManagement onNewExpense={() => setCurrentErpView({ type: 'expense_form' })} onEditExpense={(id) => setCurrentErpView({ type: 'expense_form', expenseId: id })} />;
@@ -145,26 +162,26 @@ const ERPScreen: React.FC<ERPScreenProps> = ({ setView }) => {
 
     return (
         <div className="flex flex-col md:flex-row h-full bg-gray-100 dark:bg-gray-900">
-            <aside className="w-full md:w-64 bg-white dark:bg-gray-800 shadow-md md:shadow-none md:border-r dark:border-gray-700 flex flex-col order-1">
+            <aside className="w-full md:w-64 bg-white dark:bg-gray-800 shadow-md md:shadow-none md:border-r dark:border-gray-700 flex flex-col order-1 shrink-0 overflow-y-auto">
                 <div className="hidden md:block p-4 border-b dark:border-gray-700">
                     <h1 className="text-xl font-bold text-gray-800 dark:text-gray-100 uppercase tracking-tighter">Gestão BI</h1>
-                    <span className="text-[10px] font-black text-theme-primary">USENATURAL v2.0</span>
+                    <span className="text-[10px] font-black text-theme-primary">BEMESTAR v2.0</span>
                 </div>
-                <nav className="flex-grow md:p-2 overflow-x-auto md:overflow-y-auto whitespace-nowrap md:whitespace-normal">
-                    <ul className="flex md:flex-col p-2 md:p-0 gap-2 md:gap-1 items-center md:items-stretch">
+                <nav className="flex-grow md:p-2">
+                    <ul className="flex flex-col md:p-0 gap-1">
                         {menuModules.map(module => {
                             const isExpanded = expandedSections.has(module.id);
                             return (
-                                <li key={module.id} className="inline-flex md:block md:flex-col">
-                                    <button onClick={() => toggleSection(module.id)} className="hidden md:flex items-center justify-between w-full gap-3 px-4 py-2 rounded-md text-xs font-black uppercase tracking-widest text-gray-400 hover:text-theme-primary transition-all">
+                                <li key={module.id} className="flex flex-col">
+                                    <button onClick={() => toggleSection(module.id)} className="flex items-center justify-between w-full gap-3 px-4 py-2 rounded-md text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-theme-primary transition-all">
                                         <div className="flex items-center gap-3"><module.icon className="w-4 h-4" /><span>{module.label}</span></div>
-                                        {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                                        {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                                     </button>
-                                    <ul className={`flex flex-row md:flex-col gap-2 md:gap-1 md:pl-6 md:mt-1 ${!isExpanded ? 'md:hidden' : 'md:block'}`}>
+                                    <ul className={`flex flex-col gap-1 pl-6 mt-1 mb-2 ${!isExpanded ? 'hidden' : ''}`}>
                                         {module.items.map(item => (
-                                            <li key={item.id} className="inline-block md:block">
+                                            <li key={item.id}>
                                                 <a href="#" onClick={(e) => { e.preventDefault(); setCurrentErpView({ type: 'module', id: item.id }); }} 
-                                                    className={`flex items-center gap-2 px-3 py-2 md:px-4 rounded-xl text-sm font-bold transition-all border md:border-0 ${activeModule === item.id ? 'bg-theme-primary text-white' : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100 dark:bg-gray-700 dark:text-gray-300'}`}>
+                                                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${activeModule === item.id ? 'bg-theme-primary text-white' : 'text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700 dark:text-gray-400'}`}>
                                                     <span>{item.label}</span>
                                                 </a>
                                             </li>
@@ -181,7 +198,10 @@ const ERPScreen: React.FC<ERPScreenProps> = ({ setView }) => {
                     {backAction && <Button variant="secondary" onClick={backAction} className="!py-2 !px-3"><ArrowLeft size={16} className="mr-2"/> Voltar</Button>}
                     <h2 className="text-xl md:text-2xl font-black text-gray-800 dark:text-gray-100 capitalize truncate tracking-tight">{title}</h2>
                 </header>
-                <div className="flex-1 overflow-y-auto p-4 md:p-6">{renderActiveModule()}</div>
+                <div className="flex-1 overflow-y-auto p-4 md:p-6">
+                    {activeModule === 'dre' && <ValidityAlertBanner onAction={() => setCurrentErpView({ type: 'module', id: 'inventory' })} />}
+                    {renderActiveModule()}
+                </div>
             </main>
         </div>
     );

@@ -2,7 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import type { Product } from '../../types';
 import { db } from '../../services/databaseService';
-import { Search, Weight, Package, Hash } from 'lucide-react';
+import { Search, Weight, Package, Hash, Barcode } from 'lucide-react';
 
 interface ProductSearchProps {
   onAddProduct: (product: Product, quantity: number) => void;
@@ -26,7 +26,7 @@ const ProductSearch: React.FC<ProductSearchProps> = ({ onAddProduct }) => {
     }
   }, [bulkProduct]);
 
-  // Lida com a busca de produtos por nome ou código enquanto o usuário digita.
+  // Lida com a busca de produtos por nome ou códigos enquanto o usuário digita.
   const handleSearch = async (searchQuery: string) => {
     setQuery(searchQuery);
     setHighlightedIndex(-1);
@@ -39,12 +39,13 @@ const ProductSearch: React.FC<ProductSearchProps> = ({ onAddProduct }) => {
     const lowerCaseQuery = searchQuery.toLowerCase();
     const allProducts = await db.getAll('products');
     
-    // Filtra por nome OU ID (Código Interno)
+    // Filtra por nome OU Código Interno (id) OU Código de Barras (barcode)
     const filteredResults = allProducts.filter(p => 
         p.name.toLowerCase().includes(lowerCaseQuery) ||
         p.id.toLowerCase().includes(lowerCaseQuery) ||
+        p.barcode?.toLowerCase().includes(lowerCaseQuery) ||
         p.scaleCode?.includes(searchQuery)
-    ).slice(0, 8); // Limita a 8 sugestões para não poluir a tela
+    ).slice(0, 8); 
 
     setResults(filteredResults);
   };
@@ -110,10 +111,18 @@ const ProductSearch: React.FC<ProductSearchProps> = ({ onAddProduct }) => {
         }
       }
 
-      // Busca Exata por ID
+      // 1. Busca Exata por Código Interno
       const productById = await db.get('products', trimmedQuery);
       if (productById) {
         selectProduct(productById);
+        return;
+      }
+
+      // 2. Busca Exata por Código de Barras
+      const allProducts = await db.getAll('products');
+      const productByBarcode = allProducts.find(p => p.barcode === trimmedQuery);
+      if (productByBarcode) {
+        selectProduct(productByBarcode);
         return;
       }
 
@@ -144,13 +153,12 @@ const ProductSearch: React.FC<ProductSearchProps> = ({ onAddProduct }) => {
           value={query}
           onChange={(e) => handleSearch(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Pesquisar por Nome ou Código (F1)..."
+          placeholder="Pesquisar por Nome, EAN ou Código..."
           className="w-full pl-12 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg text-lg bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-theme-primary transition-all"
           autoFocus
         />
       </div>
       
-      {/* Lista de Sugestões / Relações de Itens */}
       {results.length > 0 && (
         <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-gray-800 border-2 border-theme-primary/30 dark:border-gray-600 rounded-xl shadow-2xl overflow-hidden z-50">
           <div className="p-2 bg-gray-50 dark:bg-gray-900 border-b dark:border-gray-700">
@@ -176,9 +184,10 @@ const ProductSearch: React.FC<ProductSearchProps> = ({ onAddProduct }) => {
                   )}
                   <div>
                     <p className="font-bold text-gray-800 dark:text-gray-100">{product.name}</p>
-                    <div className="flex items-center gap-2 text-xs text-gray-500">
-                       <span className="flex items-center gap-0.5"><Hash size={10}/> {product.id}</span>
-                       {product.isBulk && <span className="bg-orange-100 text-orange-700 px-1 rounded text-[9px] font-black uppercase">Pesável</span>}
+                    <div className="flex items-center gap-3 text-[10px] text-gray-500 uppercase font-black">
+                       <span className="flex items-center gap-0.5"><Hash size={10} className="text-theme-primary"/> {product.id}</span>
+                       {product.barcode && <span className="flex items-center gap-0.5"><Barcode size={10} className="text-theme-secondary"/> {product.barcode}</span>}
+                       {product.isBulk && <span className="bg-orange-100 text-orange-700 px-1 rounded text-[8px]">Pesável</span>}
                     </div>
                   </div>
                 </div>
@@ -186,7 +195,6 @@ const ProductSearch: React.FC<ProductSearchProps> = ({ onAddProduct }) => {
                   <span className="font-black text-theme-primary text-lg">
                     {product.price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                   </span>
-                  {product.isBulk && <p className="text-[9px] text-gray-400 font-bold uppercase">Preço por KG</p>}
                 </div>
               </li>
             ))}
@@ -194,7 +202,6 @@ const ProductSearch: React.FC<ProductSearchProps> = ({ onAddProduct }) => {
         </div>
       )}
 
-      {/* Modal de Peso */}
       {bulkProduct && (
         <div className="absolute inset-0 bg-white dark:bg-gray-800 bg-opacity-98 dark:bg-opacity-98 z-50 flex flex-col items-center justify-center p-4 rounded-lg shadow-inner">
             <Weight className="w-12 h-12 text-theme-primary mb-2" />

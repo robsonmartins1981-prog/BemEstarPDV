@@ -1,9 +1,9 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../../services/databaseService';
-import type { Customer } from '../../types';
+import type { Customer, DeliveryZone } from '../../types';
 import Button from '../shared/Button';
-import { Save, User, Phone, MapPin, Instagram, FileText, CreditCard } from 'lucide-react';
+import { Save, User, Phone, MapPin, Instagram, FileText, MapPinned, DollarSign } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 interface CustomerFormPageProps {
@@ -13,18 +13,21 @@ interface CustomerFormPageProps {
 
 const CustomerFormPage: React.FC<CustomerFormPageProps> = ({ customerId, onBack }) => {
     const [formData, setFormData] = useState<Partial<Customer>>({});
+    const [zones, setZones] = useState<DeliveryZone[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
         const fetchData = async () => {
             setIsLoading(true);
-            if (customerId) {
-                const customer = await db.get('customers', customerId);
-                if (customer) {
-                    setFormData(customer);
-                } else {
-                    onBack();
-                }
+            const [allZones, customer] = await Promise.all([
+                db.getAll('deliveryZones'),
+                customerId ? db.get('customers', customerId) : Promise.resolve(null)
+            ]);
+
+            setZones(allZones.sort((a, b) => a.neighborhood.localeCompare(b.neighborhood)));
+
+            if (customer) {
+                setFormData(customer);
             } else {
                 setFormData({
                     id: uuidv4(),
@@ -34,6 +37,7 @@ const CustomerFormPage: React.FC<CustomerFormPageProps> = ({ customerId, onBack 
                     cellphone: '',
                     email: '',
                     address: '',
+                    neighborhoodId: '',
                     socialMedia: '',
                     observations: '',
                     creditLimit: 0,
@@ -44,13 +48,17 @@ const CustomerFormPage: React.FC<CustomerFormPageProps> = ({ customerId, onBack 
         fetchData();
     }, [customerId, onBack]);
 
+    const selectedZone = useMemo(() => {
+        return zones.find(z => z.id === formData.neighborhoodId);
+    }, [formData.neighborhoodId, zones]);
+
     const formatCurrencyInput = (value: string) => {
         const digits = value.replace(/\D/g, '');
         const numberValue = parseInt(digits || '0', 10) / 100;
         return numberValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     };
 
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
         if (name === 'creditLimit') {
             const formatted = formatCurrencyInput(value);
@@ -134,21 +142,61 @@ const CustomerFormPage: React.FC<CustomerFormPageProps> = ({ customerId, onBack 
                     </div>
                 </div>
 
-                {/* ENDEREÇO E OBS */}
+                {/* ENDEREÇO E FRETE AUTOMÁTICO */}
                 <div className="md:col-span-2 bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 space-y-4">
                     <div className="flex items-center gap-2 text-theme-primary font-bold border-b pb-2">
                         <MapPin size={20}/>
-                        <span>Localização e Notas</span>
+                        <span>Localização e Logística</span>
                     </div>
-                    <div>
-                        <label className="block text-xs font-bold text-gray-400 uppercase">Endereço Completo</label>
-                        <input type="text" name="address" value={formData.address} onChange={handleChange} className={inputStyle} />
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-bold text-gray-400 uppercase">Logradouro (Rua, Nº, Compl.)</label>
+                            <input type="text" name="address" value={formData.address} onChange={handleChange} className={inputStyle} />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-gray-400 uppercase">Bairro (Vincula Frete)</label>
+                            <div className="relative">
+                                <MapPinned size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                                <select 
+                                    name="neighborhoodId"
+                                    value={formData.neighborhoodId || ''}
+                                    onChange={handleChange}
+                                    className={inputStyle + " pl-10"}
+                                >
+                                    <option value="">Selecione um bairro...</option>
+                                    {zones.map(z => (
+                                        <option key={z.id} value={z.id}>{z.neighborhood}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
                     </div>
+
+                    {selectedZone && (
+                        <div className="bg-theme-primary/5 p-4 rounded-xl border border-theme-primary/20 flex items-center justify-between animate-in fade-in zoom-in-95">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-theme-primary text-white rounded-lg">
+                                    <DollarSign size={18} />
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-black text-gray-400 uppercase">Frete Automático para este Cliente</p>
+                                    <p className="text-lg font-black text-theme-primary">
+                                        {selectedZone.fee.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                    </p>
+                                </div>
+                            </div>
+                            <p className="text-[10px] font-bold text-gray-400 uppercase max-w-[200px] text-right">
+                                Valor configurado para {selectedZone.neighborhood}
+                            </p>
+                        </div>
+                    )}
+
                     <div>
                         <label className="block text-xs font-bold text-gray-400 uppercase flex items-center gap-1">
                             <FileText size={12}/> Observações Internas
                         </label>
-                        <textarea name="observations" value={formData.observations} onChange={handleChange} rows={3} className={inputStyle}></textarea>
+                        <textarea name="observations" value={formData.observations} onChange={handleChange} rows={2} className={inputStyle}></textarea>
                     </div>
                 </div>
 

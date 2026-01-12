@@ -3,13 +3,14 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../../services/databaseService';
 import type { Sale } from '../../types';
 import Button from '../shared/Button';
-import { ReceiptText, Clock, ShoppingBag, CreditCard, ChevronDown, ChevronUp, Search, Calendar, ArrowLeft } from 'lucide-react';
+import { ReceiptText, Clock, ShoppingBag, CreditCard, ChevronDown, ChevronUp, Search, Calendar, ArrowLeft, MessageCircle, Printer } from 'lucide-react';
 
 interface TodaySalesScreenProps {
   onBack: () => void;
 }
 
 const formatCurrency = (value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const formatDateTime = (date: Date) => date.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
 const formatTime = (date: Date) => date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
 const TodaySalesScreen: React.FC<TodaySalesScreenProps> = ({ onBack }) => {
@@ -32,6 +33,125 @@ const TodaySalesScreen: React.FC<TodaySalesScreenProps> = ({ onBack }) => {
     fetchSales();
   }, []);
 
+  const handlePrintReceipt = (sale: Sale) => {
+    const printWindow = window.open('', '', 'width=300,height=600');
+    if (!printWindow) return;
+
+    const itemsHtml = sale.items.map(item => `
+        <tr>
+            <td style="padding: 2px 0;">${item.productName.substring(0, 20)}</td>
+            <td style="text-align: center;">${item.quantity.toFixed(2)}</td>
+            <td style="text-align: right;">${formatCurrency(item.total)}</td>
+        </tr>
+    `).join('');
+
+    const paymentsHtml = sale.payments.map(p => `
+        <div style="display: flex; justify-content: space-between; font-size: 10px;">
+            <span>${p.method.toUpperCase()}:</span>
+            <span>${formatCurrency(p.amount)}</span>
+        </div>
+    `).join('');
+
+    printWindow.document.write(`
+        <html>
+        <head>
+            <style>
+                body { font-family: 'Courier New', Courier, monospace; font-size: 12px; width: 80mm; margin: 0; padding: 10px; }
+                .header { text-align: center; font-weight: bold; border-bottom: 1px dashed #000; padding-bottom: 5px; margin-bottom: 5px; }
+                table { width: 100%; border-collapse: collapse; }
+                .total-area { border-top: 1px dashed #000; margin-top: 5px; padding-top: 5px; font-weight: bold; }
+                .payment-area { margin-top: 5px; padding-top: 5px; border-top: 1px solid #eee; }
+                @media print { @page { margin: 0; } }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                BEM ESTAR<br>RECIBO DE VENDA<br>
+                <small>${formatDateTime(new Date(sale.date))}</small><br>
+                <small>ID: ${sale.id.split('-')[0].toUpperCase()}</small>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th style="text-align: left;">DESC</th>
+                        <th style="text-align: center;">QTD</th>
+                        <th style="text-align: right;">TOTAL</th>
+                    </tr>
+                </thead>
+                <tbody>${itemsHtml}</tbody>
+            </table>
+            <div class="total-area">
+                <div style="display: flex; justify-content: space-between;">
+                    <span>SUBTOTAL:</span>
+                    <span>${formatCurrency(sale.subtotal)}</span>
+                </div>
+                ${sale.totalDiscount > 0 ? `
+                <div style="display: flex; justify-content: space-between; color: #666;">
+                    <span>DESCONTO:</span>
+                    <span>-${formatCurrency(sale.totalDiscount)}</span>
+                </div>` : ''}
+                <div style="display: flex; justify-content: space-between; font-size: 14px;">
+                    <span>TOTAL:</span>
+                    <span>${formatCurrency(sale.totalAmount)}</span>
+                </div>
+            </div>
+            <div class="payment-area">
+                <strong>PAGAMENTOS:</strong>
+                ${paymentsHtml}
+                ${sale.change > 0 ? `<div style="display: flex; justify-content: space-between;"><span>TROCO:</span><span>${formatCurrency(sale.change)}</span></div>` : ''}
+            </div>
+            <div style="text-align: center; margin-top: 20px; font-size: 9px;">
+                OBRIGADO PELA PREFERÊNCIA!<br>Volte sempre.
+            </div>
+            <script>window.onload = () => { window.print(); window.close(); }</script>
+        </body>
+        </html>
+    `);
+    printWindow.document.close();
+  };
+
+  const handleShareWhatsApp = async (sale: Sale) => {
+    const line = "--------------------------------";
+    let text = `*BEM ESTAR - RECIBO* 🧾\n`;
+    text += `_${new Date(sale.date).toLocaleString('pt-BR')}_\n`;
+    text += `*ID:* ${sale.id.split('-')[0].toUpperCase()}\n`;
+    text += `${line}\n`;
+    
+    text += `*PRODUTOS:*\n`;
+    sale.items.forEach(item => {
+        text += `• ${item.quantity.toFixed(2)} x ${item.productName.toUpperCase()} = ${formatCurrency(item.total)}\n`;
+    });
+    
+    text += `${line}\n`;
+    text += `*SUBTOTAL:* ${formatCurrency(sale.subtotal)}\n`;
+    if (sale.totalDiscount > 0) text += `*DESC:* -${formatCurrency(sale.totalDiscount)}\n`;
+    text += `*TOTAL: ${formatCurrency(sale.totalAmount)}*\n`;
+    text += `${line}\n`;
+    
+    text += `*PAGAMENTO:*\n`;
+    sale.payments.forEach(p => {
+        text += `• ${p.method.toUpperCase()}: ${formatCurrency(p.amount)}\n`;
+    });
+    
+    if (sale.change > 0) text += `*TROCO:* ${formatCurrency(sale.change)}\n`;
+    
+    text += `\n*Agradecemos a preferência!* 🌿`;
+
+    const encodedText = encodeURIComponent(text);
+    
+    let phone = "";
+    if (sale.customerId) {
+        const customer = await db.get('customers', sale.customerId);
+        if (customer?.cellphone) phone = customer.cellphone.replace(/\D/g, '');
+    }
+
+    const whatsappUrl = phone 
+        ? `https://wa.me/55${phone}?text=${encodedText}`
+        : `https://wa.me/?text=${encodedText}`;
+    
+    window.open(whatsappUrl, '_blank');
+  };
+
   const filteredSales = useMemo(() => {
     return sales.filter(s => 
       s.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -48,7 +168,6 @@ const TodaySalesScreen: React.FC<TodaySalesScreenProps> = ({ onBack }) => {
     <div className="h-full flex flex-col bg-gray-50 dark:bg-gray-900 p-4 md:p-6">
       <div className="max-w-5xl mx-auto w-full flex flex-col h-full space-y-6">
         
-        {/* Cabeçalho da Janela */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
               <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100 flex items-center gap-3">
@@ -71,7 +190,6 @@ const TodaySalesScreen: React.FC<TodaySalesScreenProps> = ({ onBack }) => {
             </div>
         </div>
 
-        {/* Dash de Totais Rápido */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-theme-primary/10 p-4 rounded-2xl border border-theme-primary/20">
             <p className="text-[10px] font-bold text-theme-primary uppercase">Faturamento Bruto</p>
@@ -89,7 +207,6 @@ const TodaySalesScreen: React.FC<TodaySalesScreenProps> = ({ onBack }) => {
           </div>
         </div>
 
-        {/* Lista de Vendas */}
         <div className="flex-grow overflow-y-auto space-y-3 pr-2 custom-scrollbar">
           {filteredSales.length === 0 ? (
             <div className="text-center py-20 text-gray-400">
@@ -129,9 +246,24 @@ const TodaySalesScreen: React.FC<TodaySalesScreenProps> = ({ onBack }) => {
 
                 {expandedSaleId === sale.id && (
                   <div className="p-5 bg-gray-50 dark:bg-gray-900/50 border-t border-gray-100 dark:border-gray-700 space-y-4 animate-in fade-in slide-in-from-top-1 duration-200">
-                    {/* Lista de Itens */}
                     <div className="space-y-2">
-                      <p className="text-[10px] font-bold text-gray-400 uppercase mb-2">Detalhamento dos Itens</p>
+                      <div className="flex justify-between items-center mb-2">
+                        <p className="text-[10px] font-bold text-gray-400 uppercase">Detalhamento dos Itens</p>
+                        <div className="flex gap-2">
+                            <button 
+                                onClick={() => handlePrintReceipt(sale)}
+                                className="flex items-center gap-1 px-2 py-1 bg-gray-200 hover:bg-gray-300 text-gray-700 text-[10px] font-bold rounded transition-colors"
+                            >
+                                <Printer size={12} /> IMPRIMIR
+                            </button>
+                            <button 
+                                onClick={() => handleShareWhatsApp(sale)}
+                                className="flex items-center gap-1 px-2 py-1 bg-green-500 hover:bg-green-600 text-white text-[10px] font-bold rounded transition-colors"
+                            >
+                                <MessageCircle size={12} /> WHATSAPP
+                            </button>
+                        </div>
+                      </div>
                       {sale.items.map((item, idx) => (
                         <div key={idx} className="flex justify-between items-center text-sm p-2 bg-white dark:bg-gray-800 rounded-lg border border-gray-100 dark:border-gray-700">
                           <div className="flex gap-2">
@@ -143,7 +275,6 @@ const TodaySalesScreen: React.FC<TodaySalesScreenProps> = ({ onBack }) => {
                       ))}
                     </div>
 
-                    {/* Pagamentos */}
                     <div className="pt-4 border-t dark:border-gray-700 flex flex-wrap gap-2">
                       {sale.payments.map((p, idx) => (
                         <div key={idx} className="flex items-center gap-2 px-3 py-1.5 bg-theme-primary text-white rounded-lg text-xs font-bold shadow-sm">
@@ -165,7 +296,6 @@ const TodaySalesScreen: React.FC<TodaySalesScreenProps> = ({ onBack }) => {
           )}
         </div>
 
-        {/* Rodapé da Janela */}
         <div className="pt-4 border-t dark:border-gray-800 flex justify-end shrink-0">
             <Button variant="secondary" onClick={onBack}>
               <ArrowLeft size={18} className="mr-2" /> Voltar ao Caixa

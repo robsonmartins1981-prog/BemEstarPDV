@@ -4,7 +4,7 @@ import { db } from '../../services/databaseService';
 import type { Employee } from '../../types';
 import Button from '../shared/Button';
 import Modal from '../shared/Modal';
-import { PlusCircle, Edit, Trash2, UserCog, Calendar, DollarSign, BadgeCheck, XCircle, Info, Umbrella, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, UserCog, Calendar, DollarSign, BadgeCheck, XCircle, Info, Umbrella, AlertTriangle, ChevronDown, ChevronUp, Clock, Coffee, LogIn, LogOut } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 interface RoleDetail {
@@ -112,6 +112,10 @@ const HRManagement: React.FC = () => {
             hireDate: editingEmployee.hireDate || new Date(),
             contractEndDate: editingEmployee.contractEndDate,
             lastVacationDate: editingEmployee.lastVacationDate,
+            shiftStart: editingEmployee.shiftStart,
+            lunchStart: editingEmployee.lunchStart,
+            lunchEnd: editingEmployee.lunchEnd,
+            shiftEnd: editingEmployee.shiftEnd,
         };
 
         await db.put('employees', employeeData);
@@ -133,12 +137,9 @@ const HRManagement: React.FC = () => {
         fetchEmployees();
     };
 
-    // Lógica CLT: Férias vencem 1 ano após admissão (ou últimas férias). Aviso com 11 meses.
     const getVacationStatus = (emp: Employee) => {
         const baseDate = emp.lastVacationDate ? new Date(emp.lastVacationDate) : new Date(emp.hireDate);
         const today = new Date();
-        
-        // Calcula diferença em meses
         const months = (today.getFullYear() - baseDate.getFullYear()) * 12 + (today.getMonth() - baseDate.getMonth());
         
         if (months >= 11) {
@@ -158,9 +159,9 @@ const HRManagement: React.FC = () => {
             <div className="flex justify-between items-center">
                 <div>
                     <h2 className="text-2xl font-black text-gray-800 dark:text-gray-100 uppercase tracking-tight">Gestão de Equipe</h2>
-                    <p className="text-xs text-gray-500 font-bold uppercase tracking-widest">Manual de Cargos e Controle CLT</p>
+                    <p className="text-xs text-gray-500 font-bold uppercase tracking-widest">Manual de Cargos e Controle de Jornada</p>
                 </div>
-                <Button onClick={() => { setEditingEmployee({ hireDate: new Date() }); setIsModalOpen(true); }}>
+                <Button onClick={() => { setEditingEmployee({ hireDate: new Date(), status: 'ACTIVE' }); setIsModalOpen(true); }}>
                     <PlusCircle size={18}/> Novo Funcionário
                 </Button>
             </div>
@@ -198,28 +199,30 @@ const HRManagement: React.FC = () => {
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4 mb-4 bg-gray-50 dark:bg-gray-900/50 p-3 rounded-xl">
-                                <div>
-                                    <p className="text-[9px] font-black text-gray-400 uppercase">Salário Base</p>
-                                    <p className="font-mono font-bold text-theme-primary text-sm">{formatCurrency(emp.salary)}</p>
-                                </div>
-                                <div>
-                                    <p className="text-[9px] font-black text-gray-400 uppercase">Admissão</p>
-                                    <p className="text-xs font-bold text-gray-600 dark:text-gray-400">{new Date(emp.hireDate).toLocaleDateString('pt-BR')}</p>
-                                </div>
-                                {emp.contractEndDate && (
-                                    <div>
-                                        <p className="text-[9px] font-black text-gray-400 uppercase">Término Contrato</p>
-                                        <p className="text-xs font-bold text-orange-600">{new Date(emp.contractEndDate).toLocaleDateString('pt-BR')}</p>
+                            <div className="grid grid-cols-2 gap-4 mb-4">
+                                <div className="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-xl">
+                                    <p className="text-[9px] font-black text-gray-400 uppercase mb-1 flex items-center gap-1"><DollarSign size={10}/> Salário & CLT</p>
+                                    <div className="space-y-1">
+                                        <div className="flex justify-between items-center"><span className="text-[9px] font-bold text-gray-500">BASE:</span><span className="font-mono font-bold text-theme-primary text-[11px]">{formatCurrency(emp.salary)}</span></div>
+                                        <div className="flex justify-between items-center"><span className="text-[9px] font-bold text-gray-500">ADMISSÃO:</span><span className="text-[10px] font-bold text-gray-600 dark:text-gray-400">{new Date(emp.hireDate).toLocaleDateString('pt-BR')}</span></div>
                                     </div>
-                                )}
-                                <div>
-                                    <p className="text-[9px] font-black text-gray-400 uppercase">Período Aquisitivo</p>
-                                    <p className="text-xs font-bold text-gray-600 dark:text-gray-400">{vacation.months} meses trab.</p>
+                                </div>
+                                <div className="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-xl">
+                                    <p className="text-[9px] font-black text-gray-400 uppercase mb-1 flex items-center gap-1"><Clock size={10}/> Jornada</p>
+                                    <div className="space-y-0.5 font-mono text-[10px]">
+                                        {emp.shiftStart ? (
+                                            <>
+                                                <div className="flex justify-between"><span className="text-gray-500">ENTRADA:</span><span className="font-bold">{emp.shiftStart}</span></div>
+                                                <div className="flex justify-between"><span className="text-gray-500">ALMOÇO:</span><span className="font-bold">{emp.lunchStart} - {emp.lunchEnd}</span></div>
+                                                <div className="flex justify-between"><span className="text-gray-500">SAÍDA:</span><span className="font-bold">{emp.shiftEnd}</span></div>
+                                            </>
+                                        ) : (
+                                            <div className="text-center py-2 text-gray-400 italic">Não definida</div>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
 
-                            {/* Detalhes do Cargo Expandíveis */}
                             <div className="mb-4">
                                 <button 
                                     onClick={() => setExpandedInfo(isExpanded ? null : emp.id)}
@@ -267,7 +270,7 @@ const HRManagement: React.FC = () => {
                 onClose={() => setIsModalOpen(false)} 
                 title={editingEmployee?.id ? 'Editar Ficha do Colaborador' : 'Nova Contratação'}
             >
-                <form onSubmit={handleSave} className="space-y-4 max-h-[70vh] overflow-y-auto px-1">
+                <form onSubmit={handleSave} className="space-y-4 max-h-[80vh] overflow-y-auto px-1">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="md:col-span-2">
                             <label className="block text-[10px] font-black text-gray-400 uppercase mb-1 ml-1">Nome Completo</label>
@@ -314,23 +317,53 @@ const HRManagement: React.FC = () => {
                                 required
                             />
                         </div>
-                        <div>
-                            <label className="block text-[10px] font-black text-gray-400 uppercase mb-1 ml-1">Término de Contrato (Opcional)</label>
-                            <input 
-                                type="date" 
-                                value={editingEmployee?.contractEndDate ? new Date(editingEmployee.contractEndDate).toISOString().split('T')[0] : ''} 
-                                onChange={e => setEditingEmployee(p => ({...p!, contractEndDate: new Date(e.target.value)}))}
-                                className="w-full p-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-theme-primary outline-none"
-                            />
+
+                        {/* SEÇÃO DE JORNADA */}
+                        <div className="md:col-span-2 border-t dark:border-gray-700 pt-4 mt-2">
+                             <h4 className="flex items-center gap-2 text-xs font-black text-gray-500 uppercase tracking-widest mb-4">
+                                <Clock size={16} className="text-theme-primary"/> Jornada de Trabalho Diária
+                             </h4>
+                             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                <div>
+                                    <label className="block text-[10px] font-black text-gray-400 uppercase mb-1 flex items-center gap-1"><LogIn size={10}/> Entrada</label>
+                                    <input type="time" value={editingEmployee?.shiftStart || ''} onChange={e => setEditingEmployee(p => ({...p!, shiftStart: e.target.value}))} className="w-full p-2 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg font-mono text-sm outline-none focus:ring-2 focus:ring-theme-primary" />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black text-gray-400 uppercase mb-1 flex items-center gap-1"><Coffee size={10}/> Almoço Início</label>
+                                    <input type="time" value={editingEmployee?.lunchStart || ''} onChange={e => setEditingEmployee(p => ({...p!, lunchStart: e.target.value}))} className="w-full p-2 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg font-mono text-sm outline-none focus:ring-2 focus:ring-theme-primary" />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black text-gray-400 uppercase mb-1 flex items-center gap-1"><Coffee size={10}/> Almoço Fim</label>
+                                    <input type="time" value={editingEmployee?.lunchEnd || ''} onChange={e => setEditingEmployee(p => ({...p!, lunchEnd: e.target.value}))} className="w-full p-2 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg font-mono text-sm outline-none focus:ring-2 focus:ring-theme-primary" />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black text-gray-400 uppercase mb-1 flex items-center gap-1"><LogOut size={10}/> Saída Fim</label>
+                                    <input type="time" value={editingEmployee?.shiftEnd || ''} onChange={e => setEditingEmployee(p => ({...p!, shiftEnd: e.target.value}))} className="w-full p-2 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg font-mono text-sm outline-none focus:ring-2 focus:ring-theme-primary" />
+                                </div>
+                             </div>
                         </div>
-                        <div>
-                            <label className="block text-[10px] font-black text-gray-400 uppercase mb-1 ml-1">Últimas Férias Gozadas</label>
-                            <input 
-                                type="date" 
-                                value={editingEmployee?.lastVacationDate ? new Date(editingEmployee.lastVacationDate).toISOString().split('T')[0] : ''} 
-                                onChange={e => setEditingEmployee(p => ({...p!, lastVacationDate: new Date(e.target.value)}))}
-                                className="w-full p-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-theme-primary outline-none"
-                            />
+
+                        <div className="md:col-span-2 border-t dark:border-gray-700 pt-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-[10px] font-black text-gray-400 uppercase mb-1 ml-1">Término de Contrato</label>
+                                    <input 
+                                        type="date" 
+                                        value={editingEmployee?.contractEndDate ? new Date(editingEmployee.contractEndDate).toISOString().split('T')[0] : ''} 
+                                        onChange={e => setEditingEmployee(p => ({...p!, contractEndDate: new Date(e.target.value)}))}
+                                        className="w-full p-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-theme-primary outline-none"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black text-gray-400 uppercase mb-1 ml-1">Últimas Férias</label>
+                                    <input 
+                                        type="date" 
+                                        value={editingEmployee?.lastVacationDate ? new Date(editingEmployee.lastVacationDate).toISOString().split('T')[0] : ''} 
+                                        onChange={e => setEditingEmployee(p => ({...p!, lastVacationDate: new Date(e.target.value)}))}
+                                        className="w-full p-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-theme-primary outline-none"
+                                    />
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <div className="flex gap-2 pt-4">

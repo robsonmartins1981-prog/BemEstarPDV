@@ -2,9 +2,9 @@
 import React, { useState, useEffect } from 'react';
 import Button from '../shared/Button';
 import { db } from '../../services/databaseService';
-import type { ParkedSale } from '../../types';
+import type { ParkedSale, StoreSettings } from '../../types';
 import { OrderType } from '../../types';
-import { Store, Truck, MapPin, Phone, ShoppingCart, Search, Trash2, ArrowLeft } from 'lucide-react';
+import { Store, Truck, MapPin, Phone, ShoppingCart, Search, Trash2, ArrowLeft, MessageCircle, Printer, MapPinned } from 'lucide-react';
 
 interface ParkedSalesScreenProps {
   onBack: () => void;
@@ -12,15 +12,18 @@ interface ParkedSalesScreenProps {
 }
 
 const formatCurrency = (value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-const formatDateTime = (date: Date) => date.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+const formatDateTime = (date: Date) => date.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
 
 const ParkedSalesScreen: React.FC<ParkedSalesScreenProps> = ({ onBack, onLoadSale }) => {
     const [parkedSales, setParkedSales] = useState<ParkedSale[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
+    const [settings, setSettings] = useState<StoreSettings | null>(null);
 
     const fetchSales = async () => {
         const sales = await db.getAllFromIndex('parkedSales', 'createdAt');
         setParkedSales(sales.reverse());
+        const storeSettings = await db.get('storeSettings', 'main');
+        if (storeSettings) setSettings(storeSettings);
     };
 
     useEffect(() => {
@@ -28,10 +31,123 @@ const ParkedSalesScreen: React.FC<ParkedSalesScreenProps> = ({ onBack, onLoadSal
     }, []);
 
     const handleDelete = async (id: string) => {
-      if (confirm('Tem certeza que deseja excluir este pedido permanente?')) {
+      if (confirm('Tem certeza que deseja excluir este pedido permanentemente?')) {
         await db.delete('parkedSales', id);
         fetchSales();
       }
+    };
+
+    const handlePrintReceipt = (sale: ParkedSale) => {
+        const printWindow = window.open('', '', 'width=300,height=600');
+        if (!printWindow) return;
+
+        const itemsHtml = sale.items.map(item => `
+            <tr>
+                <td style="padding: 2px 0;">${item.productName.substring(0, 20)}</td>
+                <td style="text-align: center;">${item.quantity.toFixed(2)}</td>
+                <td style="text-align: right;">${formatCurrency(item.total)}</td>
+            </tr>
+        `).join('');
+
+        printWindow.document.write(`
+            <html>
+            <head>
+                <style>
+                    body { font-family: 'Courier New', Courier, monospace; font-size: 12px; width: 80mm; margin: 0; padding: 10px; }
+                    .header { text-align: center; font-weight: bold; border-bottom: 1px dashed #000; padding-bottom: 5px; margin-bottom: 5px; }
+                    table { width: 100%; border-collapse: collapse; }
+                    .total-area { border-top: 1px dashed #000; margin-top: 5px; padding-top: 5px; font-weight: bold; }
+                    .customer-info { margin-top: 10px; font-size: 10px; border-top: 1px solid #eee; padding-top: 5px; }
+                    @media print { @page { margin: 0; } }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    ${settings?.storeName || 'BEM ESTAR'}<br>GESTÃO COMERCIAL<br>
+                    <small>${formatDateTime(new Date(sale.createdAt))}</small>
+                </div>
+                <div style="text-align: center; margin-bottom: 5px; font-weight: bold;">*** PEDIDO DE ${sale.type.toUpperCase()} ***</div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="text-align: left;">DESC</th>
+                            <th style="text-align: center;">QTD</th>
+                            <th style="text-align: right;">TOTAL</th>
+                        </tr>
+                    </thead>
+                    <tbody>${itemsHtml}</tbody>
+                </table>
+                <div class="total-area">
+                    ${sale.deliveryFee ? `
+                    <div style="display: flex; justify-content: space-between; font-weight: normal; font-size: 11px;">
+                        <span>FRETE (${sale.neighborhood}):</span>
+                        <span>${formatCurrency(sale.deliveryFee)}</span>
+                    </div>` : ''}
+                    <div style="display: flex; justify-content: space-between; font-size: 14px; margin-top: 5px;">
+                        <span>TOTAL:</span>
+                        <span>${formatCurrency(sale.total)}</span>
+                    </div>
+                </div>
+                <div class="customer-info">
+                    <strong>CLIENTE:</strong> ${sale.customerName}<br>
+                    ${sale.contactPhone ? `<strong>TEL:</strong> ${sale.contactPhone}<br>` : ''}
+                    ${sale.type === OrderType.ENTREGA ? `<strong>END:</strong> ${sale.deliveryAddress}<br>` : ''}
+                    ${sale.notes ? `<strong>OBS:</strong> ${sale.notes}` : ''}
+                </div>
+                <div style="text-align: center; margin-top: 20px; font-size: 9px;">
+                    ESTE DOCUMENTO NÃO É NOTA FISCAL<br>Obrigado pela preferência!
+                </div>
+                <script>window.onload = () => { window.print(); window.close(); }</script>
+            </body>
+            </html>
+        `);
+        printWindow.document.close();
+    };
+
+    const handleShareWhatsApp = (sale: ParkedSale) => {
+        const line = "--------------------------------";
+        let text = `*NOVO PEDIDO - ${settings?.storeName?.toUpperCase() || 'BEM ESTAR'}* 🌿\n`;
+        text += `_${formatDateTime(new Date(sale.createdAt))}_\n`;
+        text += `*TIPO:* ${sale.type.toUpperCase()}\n`;
+        text += `${line}\n`;
+        
+        text += `*PRODUTOS:*\n`;
+        sale.items.forEach(item => {
+            const qty = item.quantity.toFixed(2);
+            text += `• ${qty} x ${item.productName.toUpperCase()} = ${formatCurrency(item.total)}\n`;
+        });
+        
+        if (sale.deliveryFee) {
+            text += `*FRETE (${sale.neighborhood}):* ${formatCurrency(sale.deliveryFee)}\n`;
+        }
+        
+        text += `${line}\n`;
+        text += `*VALOR TOTAL: ${formatCurrency(sale.total)}*\n`;
+        text += `${line}\n\n`;
+
+        text += `*DADOS DO CLIENTE:*\n`;
+        text += `👤 *NOME:* ${sale.customerName}\n`;
+        if (sale.contactPhone) text += `📞 *CONTATO:* ${sale.contactPhone}\n`;
+        
+        if (sale.type === OrderType.ENTREGA) {
+            text += `📍 *BAIRRO:* ${sale.neighborhood}\n`;
+            text += `🏠 *ENDEREÇO:* ${sale.deliveryAddress}\n`;
+        }
+        
+        if (sale.notes) {
+            text += `📝 *OBSERVAÇÃO:* ${sale.notes}\n`;
+        }
+
+        const encodedText = encodeURIComponent(text);
+        
+        // Se houver número da central configurado, envia para lá. Caso contrário, envia para o cliente.
+        const targetPhone = settings?.whatsappNumber || sale.contactPhone?.replace(/\D/g, '');
+        
+        const whatsappUrl = targetPhone 
+            ? `https://wa.me/55${targetPhone}?text=${encodedText}`
+            : `https://wa.me/?text=${encodedText}`;
+        
+        window.open(whatsappUrl, '_blank');
     };
 
     const filteredSales = parkedSales.filter(s => 
@@ -95,7 +211,10 @@ const ParkedSalesScreen: React.FC<ParkedSalesScreenProps> = ({ onBack, onLoadSal
                                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                                     <div className="flex items-start gap-2 text-gray-600 dark:text-gray-400">
                                       <MapPin size={16} className="shrink-0 text-theme-primary mt-0.5" />
-                                      <span className="leading-tight">{sale.deliveryAddress}</span>
+                                      <div className="flex flex-col">
+                                          <span className="font-black text-gray-800 dark:text-gray-200 uppercase text-[10px] tracking-tight">{sale.neighborhood || 'Bairro não informado'}</span>
+                                          <span className="leading-tight text-xs">{sale.deliveryAddress}</span>
+                                      </div>
                                     </div>
                                     <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
                                       <Phone size={16} className="shrink-0 text-theme-primary" />
@@ -117,8 +236,22 @@ const ParkedSalesScreen: React.FC<ParkedSalesScreenProps> = ({ onBack, onLoadSal
                                   <Button variant="danger" className="!p-3" onClick={() => handleDelete(sale.id)} title="Excluir Pedido">
                                       <Trash2 size={20} />
                                   </Button>
+                                  <button 
+                                      onClick={() => handlePrintReceipt(sale)}
+                                      className="flex items-center justify-center gap-2 px-3 py-3 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md font-bold transition-colors"
+                                      title="Imprimir Pedido"
+                                  >
+                                      <Printer size={20} />
+                                  </button>
+                                  <button 
+                                      onClick={() => handleShareWhatsApp(sale)}
+                                      className="flex items-center justify-center gap-2 px-4 py-3 bg-green-500 hover:bg-green-600 text-white rounded-md font-bold transition-colors"
+                                      title="Enviar para Central WhatsApp"
+                                  >
+                                      <MessageCircle size={20} /> <span className="hidden sm:inline">WhatsApp</span>
+                                  </button>
                                   <Button variant="primary" className="flex-grow text-lg font-bold" onClick={() => onLoadSale(sale)}>
-                                      Finalizar Agora
+                                      Finalizar
                                   </Button>
                               </div>
                           </div>

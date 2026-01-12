@@ -14,8 +14,10 @@ export enum OrderType {
 }
 
 export interface Product {
-  id: string; 
+  id: string; // Código Interno do Produto
+  barcode?: string; // Código de Barras (EAN/GTIN)
   name: string; 
+  brand?: string; 
   price: number; 
   costPrice?: number; 
   isBulk: boolean; 
@@ -69,22 +71,29 @@ export interface Sale {
 export interface Employee {
     id: string;
     name: string;
-    roleId: string; // Referência ao ID do cargo definido no manual
+    roleId: string; 
     salary: number;
     status: 'ACTIVE' | 'INACTIVE';
     hireDate: Date;
-    contractEndDate?: Date; // Fim do contrato (útil para temporários/aprendiz)
+    contractEndDate?: Date;
     lastVacationDate?: Date;
+    shiftStart?: string; 
+    lunchStart?: string; 
+    lunchEnd?: string;   
+    shiftEnd?: string;   
 }
 
-export interface AuditLog {
+export interface HistoricalCashEntry {
     id: string;
-    timestamp: Date;
-    userId: string;
-    userName: string;
-    action: string;
-    module: string;
-    details: string;
+    date: Date;
+    terminal: string; 
+    cash: number;
+    pix: number;
+    credit: number;
+    debit: number;
+    withdrawal: number;
+    totalGross: number;
+    totalNet: number;
 }
 
 export interface FinancialEntry {
@@ -96,12 +105,60 @@ export interface FinancialEntry {
     referenceId?: string;
 }
 
-export interface ParkedSale { id: string; createdAt: Date; items: SaleItem[]; total: number; type: OrderType; customerId?: string; customerName?: string; deliveryAddress?: string; contactPhone?: string; notes?: string; }
+export interface AuditLog {
+    id: string;
+    timestamp: Date;
+    module: string;
+    action: string;
+    details: string;
+    userId?: string;
+}
+
+export interface DeliveryZone {
+    id: string;
+    neighborhood: string;
+    fee: number;
+}
+
+export interface StoreSettings {
+    id: 'main';
+    whatsappNumber: string;
+    storeName: string;
+}
+
+export interface ParkedSale { 
+  id: string; 
+  createdAt: Date; 
+  items: SaleItem[]; 
+  total: number; 
+  type: OrderType; 
+  customerId?: string; 
+  customerName?: string; 
+  deliveryAddress?: string; 
+  contactPhone?: string; 
+  notes?: string;
+  deliveryFee?: number;
+  neighborhood?: string;
+}
+
 export interface CashTransaction { type: 'SUPRIMENTO' | 'SANGRIA' | 'REFORCO'; amount: number; date: Date; description: string; }
 export interface CashSession { id: 'active' | string; startDate: Date; endDate?: Date; initialAmount: number; shiftName: string; transactions: CashTransaction[]; sales: Sale[]; status: 'OPEN' | 'CLOSED'; }
 export interface Category { id: string; name: string; }
 export interface Supplier { id: string; name: string; cnpj: string; contactPerson?: string; phone?: string; email?: string; }
-export interface Customer { id: string; name: string; cpf: string; phone?: string; cellphone?: string; email?: string; address?: string; socialMedia?: string; birthDate?: Date; creditLimit?: number; observations?: string; }
+export interface Customer { 
+  id: string; 
+  name: string; 
+  cpf: string; 
+  phone?: string; 
+  cellphone?: string; 
+  email?: string; 
+  address?: string; 
+  neighborhoodId?: string; 
+  socialMedia?: string; 
+  birthDate?: Date; 
+  creditLimit?: number; 
+  observations?: string; 
+}
 export interface Expense { id: string; description: string; amount: number; supplierId?: string; dueDate: Date; paidDate?: Date; status: 'PENDING' | 'PAID'; }
 export interface InventoryLot { id: string; productId: string; supplierId?: string; quantity: number; expirationDate?: Date; entryDate: Date; costPrice: number; }
 export interface InventoryAdjustment { id: string; productId: string; lotId: string; quantityChange: number; reason: string; date: Date; }

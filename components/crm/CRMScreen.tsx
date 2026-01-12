@@ -94,7 +94,7 @@ const CRMScreen: React.FC<CRMScreenProps> = ({ setView }) => {
             <aside className="w-full md:w-64 bg-white dark:bg-gray-800 shadow-md md:shadow-none md:border-r dark:border-gray-700 flex flex-col order-1">
                 <div className="hidden md:block p-4 border-b dark:border-gray-700">
                     <h1 className="text-xl font-bold text-gray-800 dark:text-gray-100">CRM & Marketing</h1>
-                    <span className="text-sm text-gray-500">UseNatural</span>
+                    <span className="text-sm text-gray-500">BemEstar</span>
                 </div>
                 <nav className="flex-grow md:p-2 overflow-x-auto whitespace-nowrap md:whitespace-normal">
                     <ul className="flex md:flex-col p-2 md:p-0 gap-2 md:gap-1">

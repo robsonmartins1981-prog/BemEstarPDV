@@ -3,15 +3,16 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { db } from '../../services/databaseService';
 import type { Product, Category } from '../../types';
 import Button from '../shared/Button';
-import { PlusCircle, Edit, Trash2, Search } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, FileCode } from 'lucide-react';
 
 interface ProductManagementProps {
     onNewProduct: () => void;
     onEditProduct: (productId: string) => void;
+    onImportXML: () => void; // Nova prop para navegar para importação
 }
 
 // Componente principal para a gestão de produtos.
-const ProductManagement: React.FC<ProductManagementProps> = ({ onNewProduct, onEditProduct }) => {
+const ProductManagement: React.FC<ProductManagementProps> = ({ onNewProduct, onEditProduct, onImportXML }) => {
     const [products, setProducts] = useState<Product[]>([]);
     const [categories, setCategories] = useState<Category[]>([]);
     const [filters, setFilters] = useState({
@@ -44,7 +45,6 @@ const ProductManagement: React.FC<ProductManagementProps> = ({ onNewProduct, onE
 
     const handleDelete = async (id: string) => {
         if (confirm('Tem certeza que deseja excluir este produto? Isso também removerá os lotes associados.')) {
-            // Lógica adicional para remover lotes seria necessária aqui em um cenário real.
             await db.delete('products', id);
             fetchData();
         }
@@ -71,27 +71,32 @@ const ProductManagement: React.FC<ProductManagementProps> = ({ onNewProduct, onE
 
     return (
         <div className="space-y-4">
-             <div className="flex justify-between items-center">
-                <h2 className="text-2xl font-semibold">Gerenciamento de Produtos</h2>
-                <Button onClick={onNewProduct}><PlusCircle size={18}/> Novo Produto</Button>
+             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <h2 className="text-2xl font-black text-gray-800 dark:text-gray-100 uppercase tracking-tight">Produtos</h2>
+                <div className="flex gap-2 w-full md:w-auto">
+                    <Button variant="secondary" onClick={onImportXML} className="flex-1 md:flex-none">
+                        <FileCode size={18}/> Importar XML
+                    </Button>
+                    <Button onClick={onNewProduct} className="flex-1 md:flex-none">
+                        <PlusCircle size={18}/> Novo Produto
+                    </Button>
+                </div>
             </div>
             
-            {/* Tabela de Produtos */}
-            <div className="overflow-x-auto bg-white dark:bg-gray-800 rounded-lg shadow">
+            <div className="overflow-x-auto bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
                 <table className="w-full text-sm text-left">
-                     <thead className="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
+                     <thead className="text-[10px] text-gray-500 uppercase font-black bg-gray-50 dark:bg-gray-700/50">
                         <tr>
-                            <th className="px-6 py-3">Produto</th>
-                            <th className="px-6 py-3">Categoria</th>
-                            <th className="px-6 py-3">Cód. Barras</th>
-                            <th className="px-6 py-3 text-right">Preço Venda</th>
-                            <th className="px-6 py-3 text-right">Estoque</th>
-                            <th className="px-6 py-3 text-center">Ações</th>
+                            <th className="px-6 py-4">Produto</th>
+                            <th className="px-6 py-4">Categoria</th>
+                            <th className="px-6 py-4">Cód. Barras</th>
+                            <th className="px-6 py-4 text-right">Preço Venda</th>
+                            <th className="px-6 py-4 text-right">Estoque</th>
+                            <th className="px-6 py-4 text-center">Ações</th>
                         </tr>
-                        {/* Linha de Filtros */}
-                         <tr className="bg-gray-100 dark:bg-gray-900/50">
+                        <tr className="bg-white dark:bg-gray-800">
                             <th className="px-4 py-2 font-normal">
-                                <input type="text" name="name" placeholder="Filtrar nome..." value={filters.name} onChange={handleFilterChange} className={filterInputClass} />
+                                <input type="text" name="name" placeholder="Filtrar..." value={filters.name} onChange={handleFilterChange} className={filterInputClass} />
                             </th>
                             <th className="px-4 py-2 font-normal">
                                  <select name="categoryId" value={filters.categoryId} onChange={handleFilterChange} className={filterInputClass}>
@@ -100,36 +105,31 @@ const ProductManagement: React.FC<ProductManagementProps> = ({ onNewProduct, onE
                                 </select>
                             </th>
                              <th className="px-4 py-2 font-normal">
-                                <input type="text" name="id" placeholder="Filtrar código..." value={filters.id} onChange={handleFilterChange} className={filterInputClass} />
+                                <input type="text" name="id" placeholder="Cód..." value={filters.id} onChange={handleFilterChange} className={filterInputClass} />
                             </th>
-                             <th className="px-4 py-2 font-normal">
-                                <input type="text" name="price" placeholder="Filtrar preço..." value={filters.price} onChange={handleFilterChange} className={`${filterInputClass} text-right`} />
-                            </th>
-                             <th className="px-4 py-2 font-normal">
-                                <input type="text" name="stock" placeholder="Filtrar estoque..." value={filters.stock} onChange={handleFilterChange} className={`${filterInputClass} text-right`} />
-                            </th>
+                             <th className="px-4 py-2 font-normal"></th>
+                             <th className="px-4 py-2 font-normal"></th>
                             <th className="px-4 py-2"></th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                         {filteredProducts.map(product => (
-                            <tr key={product.id} className="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600/20">
-                                <td className="px-6 py-3 font-medium">{product.name}</td>
-                                <td className="px-6 py-3">{categoryMap.get(product.categoryId || '') || '-'}</td>
-                                <td className="px-6 py-3 font-mono">{product.id}</td>
-                                <td className="px-6 py-3 text-right font-mono">{formatCurrency(product.price)}</td>
-                                <td className="px-6 py-3 text-right">
+                            <tr key={product.id} className="hover:bg-gray-50 dark:hover:bg-gray-600/10 transition-colors">
+                                <td className="px-6 py-4 font-bold text-gray-700 dark:text-gray-200">{product.name}</td>
+                                <td className="px-6 py-4 text-gray-500">{categoryMap.get(product.categoryId || '') || '-'}</td>
+                                <td className="px-6 py-4 font-mono text-xs text-gray-400">{product.id}</td>
+                                <td className="px-6 py-4 text-right font-mono font-bold text-theme-primary">{formatCurrency(product.price)}</td>
+                                <td className="px-6 py-4 text-right">
                                     <div className="flex flex-col items-end">
-                                        <span className="font-mono">{product.stock} {product.isBulk ? 'kg' : 'un'}</span>
-                                        {product.minStock && product.minStock > 0 && (
-                                            <span className="text-xs text-gray-500">(Mín: {product.minStock})</span>
-                                        )}
+                                        <span className={`font-mono font-bold ${product.stock <= (product.minStock || 0) ? 'text-red-500' : 'text-gray-600 dark:text-gray-300'}`}>
+                                            {product.stock.toFixed(2)} {product.isBulk ? 'kg' : 'un'}
+                                        </span>
                                     </div>
                                 </td>
-                                <td className="px-6 py-3 text-center">
+                                <td className="px-6 py-4 text-center">
                                     <div className="flex justify-center gap-2">
-                                        <Button variant="secondary" className="p-2 h-auto" onClick={() => onEditProduct(product.id)}><Edit size={16}/></Button>
-                                        <Button variant="danger" className="p-2 h-auto" onClick={() => handleDelete(product.id)}><Trash2 size={16}/></Button>
+                                        <Button variant="secondary" className="!p-2 h-auto" onClick={() => onEditProduct(product.id)}><Edit size={16}/></Button>
+                                        <Button variant="danger" className="!p-2 h-auto" onClick={() => handleDelete(product.id)}><Trash2 size={16}/></Button>
                                     </div>
                                 </td>
                             </tr>
@@ -137,8 +137,8 @@ const ProductManagement: React.FC<ProductManagementProps> = ({ onNewProduct, onE
                     </tbody>
                 </table>
                  {filteredProducts.length === 0 && (
-                    <div className="text-center p-8 text-gray-500">
-                        Nenhum produto encontrado com os filtros aplicados.
+                    <div className="text-center p-12 text-gray-400 uppercase text-xs font-bold tracking-widest">
+                        Nenhum produto encontrado.
                     </div>
                 )}
             </div>

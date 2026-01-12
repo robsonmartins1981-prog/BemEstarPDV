@@ -3,8 +3,9 @@ import React, { useState, useEffect } from 'react';
 import Modal from '../shared/Modal';
 import Button from '../shared/Button';
 import { OrderType } from '../../types';
-import type { Customer, SaleItem, ParkedSale } from '../../types';
-import { Store, Truck, User, Phone, MapPin, AlertCircle } from 'lucide-react';
+import type { Customer, SaleItem, ParkedSale, DeliveryZone } from '../../types';
+import { db } from '../../services/databaseService';
+import { Store, Truck, User, Phone, MapPin, AlertCircle, MapPinned } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 interface SaveOrderModalProps {
@@ -22,25 +23,47 @@ const SaveOrderModal: React.FC<SaveOrderModalProps> = ({ isOpen, onClose, items,
   const [address, setAddress] = useState('');
   const [notes, setNotes] = useState('');
   const [error, setError] = useState('');
+  
+  const [zones, setZones] = useState<DeliveryZone[]>([]);
+  const [selectedZone, setSelectedZone] = useState<DeliveryZone | null>(null);
 
   useEffect(() => {
     if (isOpen) {
       setType(OrderType.RETIRADA);
-      setPhone(customer?.phone || '');
+      setPhone(customer?.cellphone || customer?.phone || '');
       setAddress(customer?.address || '');
       setNotes('');
       setError('');
+      
+      // Carrega zonas e tenta pré-selecionar a do cliente
+      db.getAll('deliveryZones').then(data => {
+          const sorted = data.sort((a,b) => a.neighborhood.localeCompare(b.neighborhood));
+          setZones(sorted);
+          
+          if (customer?.neighborhoodId) {
+              const zone = sorted.find(z => z.id === customer.neighborhoodId);
+              if (zone) {
+                  setSelectedZone(zone);
+                  // Se o cliente tem bairro, assume-se que é entrega por padrão
+                  setType(OrderType.ENTREGA);
+              } else {
+                  setSelectedZone(null);
+              }
+          } else {
+              setSelectedZone(null);
+          }
+      });
     }
   }, [isOpen, customer]);
 
   const handleConfirm = () => {
     if (type === OrderType.ENTREGA) {
-      if (!customer) {
-        setError('Para entrega, é necessário selecionar um cliente primeiro.');
+      if (!customer && !phone.trim()) {
+        setError('Para entrega, informe ao menos um telefone de contato.');
         return;
       }
-      if (!phone.trim() || !address.trim()) {
-        setError('Telefone e Endereço são obrigatórios para entregas.');
+      if (!address.trim()) {
+        setError('Endereço é obrigatório para entregas.');
         return;
       }
     }
@@ -49,18 +72,22 @@ const SaveOrderModal: React.FC<SaveOrderModalProps> = ({ isOpen, onClose, items,
       id: uuidv4(),
       createdAt: new Date(),
       items,
-      total,
+      total: total + (type === OrderType.ENTREGA ? (selectedZone?.fee || 0) : 0),
       type,
       customerId: customer?.id,
       customerName: customer?.name || 'Cliente de Balcão',
       contactPhone: phone,
       deliveryAddress: address,
-      notes
+      notes,
+      deliveryFee: type === OrderType.ENTREGA ? selectedZone?.fee : 0,
+      neighborhood: type === OrderType.ENTREGA ? selectedZone?.neighborhood : undefined
     };
 
     onSave(parkedSale);
     onClose();
   };
+
+  const finalTotal = total + (type === OrderType.ENTREGA ? (selectedZone?.fee || 0) : 0);
 
   return (
     <Modal
@@ -101,51 +128,64 @@ const SaveOrderModal: React.FC<SaveOrderModalProps> = ({ isOpen, onClose, items,
           </div>
         )}
 
-        {/* Detalhes do Cliente */}
         <div className="space-y-4">
-          <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-            <User className="text-gray-400" />
-            <div>
-              <p className="text-xs font-bold text-gray-400 uppercase">Cliente</p>
-              <p className="font-semibold">{customer?.name || 'Cliente de Balcão'}</p>
-            </div>
-          </div>
-
           {type === OrderType.ENTREGA && (
-            <>
-              <div className="relative">
-                <label className="text-[10px] font-bold text-gray-400 uppercase absolute left-3 top-2">Telefone de Contato</label>
-                <div className="flex items-center bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg pt-6 pb-2 px-3">
-                  <Phone size={18} className="text-gray-400 mr-2" />
-                  <input
-                    type="text"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="(00) 00000-0000"
-                    className="w-full bg-transparent outline-none font-medium"
-                  />
+            <div className="animate-in slide-in-from-top-2 duration-300 space-y-4">
+               <div>
+                    <label className="block text-[10px] font-black text-gray-400 uppercase mb-1 ml-1">Selecione o Bairro (Frete)</label>
+                    <div className="relative">
+                        <MapPinned size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                        <select 
+                            value={selectedZone?.id || ''}
+                            onChange={e => {
+                                const zone = zones.find(z => z.id === e.target.value);
+                                setSelectedZone(zone || null);
+                            }}
+                            className="w-full pl-10 pr-4 py-3 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-theme-primary outline-none"
+                        >
+                            <option value="">Selecione o bairro...</option>
+                            {zones.map(z => (
+                                <option key={z.id} value={z.id}>{z.neighborhood} - {z.fee.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</option>
+                            ))}
+                        </select>
+                    </div>
                 </div>
-              </div>
 
-              <div className="relative">
-                <label className="text-[10px] font-bold text-gray-400 uppercase absolute left-3 top-2">Endereço de Entrega</label>
-                <div className="flex items-start bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg pt-6 pb-2 px-3">
-                  <MapPin size={18} className="text-gray-400 mr-2 mt-1" />
-                  <textarea
-                    rows={2}
-                    value={address}
-                    onChange={(e) => setAddress(e.target.value)}
-                    placeholder="Rua, Número, Bairro, Ponto de referência..."
-                    className="w-full bg-transparent outline-none font-medium resize-none text-sm"
-                  />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="relative">
+                        <label className="text-[10px] font-bold text-gray-400 uppercase absolute left-3 top-2">Telefone de Contato</label>
+                        <div className="flex items-center bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-xl pt-6 pb-2 px-3 shadow-sm">
+                        <Phone size={18} className="text-gray-400 mr-2" />
+                        <input
+                            type="text"
+                            value={phone}
+                            onChange={(e) => setPhone(e.target.value)}
+                            placeholder="(00) 00000-0000"
+                            className="w-full bg-transparent outline-none font-medium"
+                        />
+                        </div>
+                    </div>
+
+                    <div className="relative">
+                        <label className="text-[10px] font-bold text-gray-400 uppercase absolute left-3 top-2">Endereço de Entrega</label>
+                        <div className="flex items-start bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-xl pt-6 pb-2 px-3 shadow-sm">
+                        <MapPin size={18} className="text-gray-400 mr-2 mt-1" />
+                        <textarea
+                            rows={1}
+                            value={address}
+                            onChange={(e) => setAddress(e.target.value)}
+                            placeholder="Rua, Número, Ponto ref..."
+                            className="w-full bg-transparent outline-none font-medium resize-none text-sm"
+                        />
+                        </div>
+                    </div>
                 </div>
-              </div>
-            </>
+            </div>
           )}
 
           <div className="relative">
             <label className="text-[10px] font-bold text-gray-400 uppercase absolute left-3 top-2">Observações / Notas</label>
-            <div className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg pt-6 pb-2 px-3">
+            <div className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-xl pt-6 pb-2 px-3 shadow-sm">
               <input
                 type="text"
                 value={notes}
@@ -154,6 +194,17 @@ const SaveOrderModal: React.FC<SaveOrderModalProps> = ({ isOpen, onClose, items,
                 className="w-full bg-transparent outline-none"
               />
             </div>
+          </div>
+
+          <div className="bg-theme-primary/5 p-4 rounded-2xl border border-theme-primary/20 flex justify-between items-center">
+                <div>
+                    <p className="text-[10px] font-black text-gray-400 uppercase">Resumo Financeiro</p>
+                    <p className="text-xs text-gray-500 font-bold uppercase tracking-tighter">Itens: {total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} + Frete: {(selectedZone?.fee || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                </div>
+                <div className="text-right">
+                    <p className="text-[10px] font-black text-gray-400 uppercase">Total Geral</p>
+                    <p className="text-2xl font-black text-theme-primary leading-tight">{finalTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                </div>
           </div>
         </div>
       </div>
