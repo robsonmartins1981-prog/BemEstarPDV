@@ -72,6 +72,52 @@ export async function initDB() {
   await seedInitialData();
 }
 
+/**
+ * Realiza o backup total de todas as stores do banco.
+ */
+export async function exportFullBackup() {
+    const stores: (keyof AppDB)[] = [
+        'products', 'categories', 'sales', 'customers', 'suppliers', 
+        'expenses', 'employees', 'historicalCash', 'deliveryZones', 
+        'inventoryLots', 'inventoryAdjustments', 'storeSettings', 
+        'coupons', 'segments', 'campaigns'
+    ];
+    
+    const backupData: any = {};
+
+    for (const store of stores) {
+        backupData[store] = await db.getAll(store);
+    }
+
+    const blob = new Blob([JSON.stringify(backupData)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `BACKUP_TOTAL_BEMESTAR_${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+/**
+ * Importa dados de backup de forma incremental (sem duplicar).
+ */
+export async function importFullBackup(jsonContent: string) {
+    const backupData = JSON.parse(jsonContent);
+    const stores = Object.keys(backupData);
+
+    for (const storeName of stores) {
+        const dataArray = backupData[storeName];
+        if (Array.isArray(dataArray)) {
+            const tx = db.transaction(storeName as any, 'readwrite');
+            for (const item of dataArray) {
+                // put() garante que se o ID já existe, ele apenas atualiza.
+                await tx.store.put(item);
+            }
+            await tx.done;
+        }
+    }
+}
+
 async function seedInitialData() {
     try {
         const productCount = await db.count('products');

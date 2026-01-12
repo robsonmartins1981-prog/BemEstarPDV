@@ -159,7 +159,7 @@ export interface Customer {
   creditLimit?: number; 
   observations?: string; 
 }
-export interface Expense { id: string; description: string; amount: number; supplierId?: string; dueDate: Date; paidDate?: Date; status: 'PENDING' | 'PAID'; }
+export interface Expense { id: string; description: string; amount: number; supplierId?: string; categoryId: string; dueDate: Date; paidDate?: Date; status: 'PENDING' | 'PAID'; }
 export interface InventoryLot { id: string; productId: string; supplierId?: string; quantity: number; expirationDate?: Date; entryDate: Date; costPrice: number; }
 export interface InventoryAdjustment { id: string; productId: string; lotId: string; quantityChange: number; reason: string; date: Date; }
 export interface Coupon { id: string; code: string; type: 'PERCENTAGE' | 'FIXED_AMOUNT'; value: number; expiryDate: Date; maxUses: number; currentUses: number; isActive: number; }

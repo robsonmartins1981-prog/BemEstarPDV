@@ -5,7 +5,8 @@ import type { Product, InventoryLot } from '../../types';
 import Button from '../shared/Button';
 import AdjustmentHistoryModal from './AdjustmentHistoryModal';
 import EditLotModal from './EditLotModal';
-import { ChevronDown, ChevronUp, History, Calendar, AlertTriangle, Search, Pencil, Filter } from 'lucide-react';
+import BarcodeScanner from './BarcodeScanner';
+import { ChevronDown, ChevronUp, History, Calendar, AlertTriangle, Search, Pencil, Filter, Camera } from 'lucide-react';
 
 type ValidityPeriod = 'ALL' | 'EXPIRED' | '7DAYS' | '15DAYS' | '30DAYS' | '60DAYS' | '90DAYS' | '180DAYS';
 
@@ -17,6 +18,7 @@ const InventoryReport: React.FC = () => {
     const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
     const [historyProductId, setHistoryProductId] = useState<string | null>(null);
     const [editingLot, setEditingLot] = useState<InventoryLot | null>(null);
+    const [isScannerOpen, setIsScannerOpen] = useState(false);
 
     const fetchData = useCallback(async () => {
         const [allProducts, allLots] = await Promise.all([
@@ -71,7 +73,11 @@ const InventoryReport: React.FC = () => {
         const productIdsWithMatchingLots = new Set(matchingLots.map(l => l.productId));
 
         return products.filter(p => {
-            const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) || p.id.includes(searchTerm);
+            const matchesSearch = 
+                p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                p.id.includes(searchTerm) ||
+                (p.barcode && p.barcode.includes(searchTerm));
+            
             const matchesValidity = productIdsWithMatchingLots.has(p.id) || (validityFilter === 'ALL');
             return matchesSearch && matchesValidity;
         });
@@ -93,6 +99,11 @@ const InventoryReport: React.FC = () => {
             if (next.has(id)) next.delete(id); else next.add(id);
             return next;
         });
+    };
+
+    const handleBarcodeDetected = (code: string) => {
+        setSearchTerm(code);
+        setIsScannerOpen(false);
     };
 
     const filterOptions = [
@@ -118,15 +129,24 @@ const InventoryReport: React.FC = () => {
                     </div>
                     
                     <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto">
-                        <div className="relative">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                            <input 
-                                type="text" 
-                                placeholder="Filtrar por nome do produto..." 
-                                value={searchTerm} 
-                                onChange={e => setSearchTerm(e.target.value)} 
-                                className="w-full md:w-64 pl-10 pr-4 py-3 rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 focus:ring-2 focus:ring-theme-primary outline-none transition-all"
-                            />
+                        <div className="relative flex items-center gap-2">
+                            <div className="relative flex-1">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                                <input 
+                                    type="text" 
+                                    placeholder="Nome ou código..." 
+                                    value={searchTerm} 
+                                    onChange={e => setSearchTerm(e.target.value)} 
+                                    className="w-full md:w-64 pl-10 pr-4 py-3 rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 focus:ring-2 focus:ring-theme-primary outline-none transition-all"
+                                />
+                            </div>
+                            <button 
+                                onClick={() => setIsScannerOpen(true)}
+                                className="p-3 bg-theme-primary text-white rounded-2xl shadow-lg hover:bg-theme-primary-hover transition-all active:scale-95"
+                                title="Scanner de Câmera"
+                            >
+                                <Camera size={20} />
+                            </button>
                         </div>
                         
                         <div className="relative">
@@ -177,7 +197,10 @@ const InventoryReport: React.FC = () => {
                                             </td>
                                             <td className="px-6 py-4">
                                                 <p className="font-black text-gray-700 dark:text-gray-200 uppercase tracking-tight">{product.name}</p>
-                                                <p className="text-[10px] text-gray-400 font-bold uppercase">{product.brand || 'Marca Própria'}</p>
+                                                <div className="flex items-center gap-2">
+                                                    <p className="text-[10px] text-gray-400 font-bold uppercase">{product.brand || 'Marca Própria'}</p>
+                                                    {product.barcode && <span className="text-[9px] text-theme-primary font-mono font-bold">#{product.barcode}</span>}
+                                                </div>
                                             </td>
                                             <td className="px-6 py-4 text-right">
                                                 <span className="font-mono font-black text-theme-primary text-lg">
@@ -260,6 +283,13 @@ const InventoryReport: React.FC = () => {
                 lot={editingLot} 
                 onSave={fetchData} 
             />
+
+            {isScannerOpen && (
+                <BarcodeScanner 
+                    onDetected={handleBarcodeDetected} 
+                    onClose={() => setIsScannerOpen(false)} 
+                />
+            )}
         </div>
     );
 };
