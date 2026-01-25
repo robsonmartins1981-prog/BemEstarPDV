@@ -1,7 +1,5 @@
 {
   "name": "Bem Estar PDV",
   "description": "A local-first Point of Sale (POS) application for the 'Bem Estar' store, designed to be fast, reliable, and work completely offline. It handles cash control, sales, and payments with a clean and intuitive interface.",
-  "requestFramePermissions": [
-    "camera"
-  ]
+  "requestFramePermissions": []
 }

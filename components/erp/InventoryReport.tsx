@@ -5,8 +5,7 @@ import type { Product, InventoryLot } from '../../types';
 import Button from '../shared/Button';
 import AdjustmentHistoryModal from './AdjustmentHistoryModal';
 import EditLotModal from './EditLotModal';
-import BarcodeScanner from './BarcodeScanner';
-import { ChevronDown, ChevronUp, History, Calendar, AlertTriangle, Search, Pencil, Filter, Camera } from 'lucide-react';
+import { ChevronDown, ChevronUp, History, Calendar, AlertTriangle, Search, Pencil, Filter } from 'lucide-react';
 
 type ValidityPeriod = 'ALL' | 'EXPIRED' | '7DAYS' | '15DAYS' | '30DAYS' | '60DAYS' | '90DAYS' | '180DAYS';
 
@@ -18,7 +17,6 @@ const InventoryReport: React.FC = () => {
     const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
     const [historyProductId, setHistoryProductId] = useState<string | null>(null);
     const [editingLot, setEditingLot] = useState<InventoryLot | null>(null);
-    const [isScannerOpen, setIsScannerOpen] = useState(false);
 
     const fetchData = useCallback(async () => {
         const [allProducts, allLots] = await Promise.all([
@@ -101,11 +99,6 @@ const InventoryReport: React.FC = () => {
         });
     };
 
-    const handleBarcodeDetected = (code: string) => {
-        setSearchTerm(code);
-        setIsScannerOpen(false);
-    };
-
     const filterOptions = [
         { id: 'ALL', label: 'Todos os Itens' },
         { id: 'EXPIRED', label: 'Já Vencidos' },
@@ -140,13 +133,6 @@ const InventoryReport: React.FC = () => {
                                     className="w-full md:w-64 pl-10 pr-4 py-3 rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 focus:ring-2 focus:ring-theme-primary outline-none transition-all"
                                 />
                             </div>
-                            <button 
-                                onClick={() => setIsScannerOpen(true)}
-                                className="p-3 bg-theme-primary text-white rounded-2xl shadow-lg hover:bg-theme-primary-hover transition-all active:scale-95"
-                                title="Scanner de Câmera"
-                            >
-                                <Camera size={20} />
-                            </button>
                         </div>
                         
                         <div className="relative">
@@ -283,13 +269,6 @@ const InventoryReport: React.FC = () => {
                 lot={editingLot} 
                 onSave={fetchData} 
             />
-
-            {isScannerOpen && (
-                <BarcodeScanner 
-                    onDetected={handleBarcodeDetected} 
-                    onClose={() => setIsScannerOpen(false)} 
-                />
-            )}
         </div>
     );
 };
