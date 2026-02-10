@@ -1,134 +1,185 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../../services/databaseService';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie } from 'recharts';
-import { TrendingUp, TrendingDown, DollarSign, PieChart as PieIcon, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { TrendingUp, DollarSign, Wallet, Smartphone, CreditCard, ArrowUpRight, ArrowDownRight, LayoutDashboard, Receipt } from 'lucide-react';
 
 const DREDashboard: React.FC = () => {
     const [sales, setSales] = useState<any[]>([]);
     const [expenses, setExpenses] = useState<any[]>([]);
-    const [employees, setEmployees] = useState<any[]>([]);
+    const [historicalCash, setHistoricalCash] = useState<any[]>([]);
 
     useEffect(() => {
         const load = async () => {
-            const [s, e, emp] = await Promise.all([
+            const [s, e, h] = await Promise.all([
                 db.getAll('sales'),
                 db.getAll('expenses'),
-                db.getAll('employees')
+                db.getAll('historicalCash')
             ]);
             setSales(s);
             setExpenses(e);
-            setEmployees(emp);
+            setHistoricalCash(h);
         };
         load();
     }, []);
 
-    const dreData = useMemo(() => {
-        const revenue = sales.reduce((acc, s) => acc + s.totalAmount, 0);
+    const totals = useMemo(() => {
+        // Receita de vendas atuais + Fechamentos históricos
+        const currentSalesRevenue = sales.reduce((acc, s) => acc + s.totalAmount, 0);
+        const historicalRevenue = historicalCash.reduce((acc, h) => acc + h.totalGross, 0);
+        const grossRevenue = currentSalesRevenue + historicalRevenue;
+
+        // Despesas
+        const paidExpenses = expenses.filter(e => e.status === 'PAID').reduce((acc, e) => acc + e.amount, 0);
+        const pendingExpenses = expenses.filter(e => e.status === 'PENDING').reduce((acc, e) => acc + e.amount, 0);
+
+        const netBalance = grossRevenue - paidExpenses;
+
+        // Origem do Recurso (Mix de Pagamento)
+        // Somando dados históricos + vendas atuais
+        let mix = { cash: 0, pix: 0, debit: 0, credit: 0 };
         
-        // CMV Simplificado: soma do custo unitário dos itens vendidos
-        const cmv = sales.reduce((acc, s) => {
-            return acc + s.items.reduce((iAcc: number, item: any) => iAcc + (item.quantity * (item.costPrice || 0)), 0);
-        }, 0);
+        historicalCash.forEach(h => {
+            mix.cash += (h.cash || 0);
+            mix.pix += (h.pix || 0);
+            mix.debit += (h.debit || 0);
+            mix.credit += (h.credit || 0);
+        });
 
-        const operationalExpenses = expenses
-            .filter(e => e.status === 'PAID')
-            .reduce((acc, e) => acc + e.amount, 0);
+        sales.forEach(s => {
+            s.payments.forEach((p: any) => {
+                if (p.method === 'Dinheiro') mix.cash += p.amount;
+                if (p.method === 'PIX') mix.pix += p.amount;
+                if (p.method === 'Débito') mix.debit += p.amount;
+                if (p.method === 'Crédito') mix.credit += p.amount;
+            });
+        });
 
-        const staffCosts = employees
-            .filter(emp => emp.status === 'ACTIVE')
-            .reduce((acc, emp) => acc + emp.salary, 0);
-
-        const grossProfit = revenue - cmv;
-        const netProfit = grossProfit - operationalExpenses - staffCosts;
-        const margin = revenue > 0 ? (netProfit / revenue) * 100 : 0;
-
-        return { revenue, cmv, grossProfit, operationalExpenses, staffCosts, netProfit, margin };
-    }, [sales, expenses, employees]);
+        return { grossRevenue, paidExpenses, pendingExpenses, netBalance, mix };
+    }, [sales, expenses, historicalCash]);
 
     const formatCurrency = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-
-    const chartData = [
-        { name: 'Receita', value: dreData.revenue, color: '#00843D' },
-        { name: 'CMV', value: dreData.cmv, color: '#E87722' },
-        { name: 'Desp. Operacionais', value: dreData.operationalExpenses, color: '#F9B208' },
-        { name: 'Folha Pagto', value: dreData.staffCosts, color: '#1E3A63' },
-    ];
+    const formatPercent = (val: number, total: number) => total > 0 ? ((val / total) * 100).toFixed(1) + '%' : '0.0%';
 
     return (
-        <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border-b-4 border-theme-primary">
-                    <p className="text-xs font-black text-gray-400 uppercase tracking-widest">Faturamento Total</p>
-                    <div className="flex items-center justify-between mt-2">
-                        <span className="text-2xl font-black text-gray-800 dark:text-gray-100">{formatCurrency(dreData.revenue)}</span>
-                        <ArrowUpRight className="text-theme-primary" />
+        <div className="space-y-8 pb-10">
+            {/* Header / Topo */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <DRECard 
+                    label="Faturamento Bruto" 
+                    value={totals.grossRevenue} 
+                    icon={TrendingUp} 
+                    color="text-theme-primary" 
+                    bgColor="bg-theme-primary/10" 
+                />
+                <DRECard 
+                    label="Despesas Pagas" 
+                    value={totals.paidExpenses} 
+                    icon={CheckCircleIcon} 
+                    color="text-red-500" 
+                    bgColor="bg-red-50" 
+                />
+                <DRECard 
+                    label="Contas Pendentes" 
+                    value={totals.pendingExpenses} 
+                    icon={ClockIcon} 
+                    color="text-theme-secondary" 
+                    bgColor="bg-theme-secondary/10" 
+                />
+                <DRECard 
+                    label="Saldo Líquido" 
+                    value={totals.netBalance} 
+                    icon={DollarSign} 
+                    color="text-theme-darkblue" 
+                    bgColor="bg-theme-darkblue/10" 
+                    isMain
+                />
+            </div>
+
+            {/* Card de Origem Detalhada (Inspirado na imagem) */}
+            <div className="bg-white dark:bg-gray-800 p-8 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-10">
+                    <div>
+                        <h3 className="text-xl font-black text-gray-800 dark:text-gray-100 uppercase tracking-tighter">Recursos por Modalidade</h3>
+                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-1">Origem detalhada de cada Real que entrou no caixa</p>
+                    </div>
+                    <div className="bg-gray-50 dark:bg-gray-900 px-4 py-2 rounded-xl border dark:border-gray-700">
+                        <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Total Bruto</span>
+                        <span className="text-lg font-black text-gray-800 dark:text-gray-100">{formatCurrency(totals.grossRevenue)}</span>
                     </div>
                 </div>
-                <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border-b-4 border-theme-secondary">
-                    <p className="text-xs font-black text-gray-400 uppercase tracking-widest">Lucro Bruto</p>
-                    <div className="flex items-center justify-between mt-2">
-                        <span className="text-2xl font-black text-gray-800 dark:text-gray-100">{formatCurrency(dreData.grossProfit)}</span>
-                        <TrendingUp className="text-theme-secondary" />
-                    </div>
-                </div>
-                <div className={`bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border-b-4 ${dreData.netProfit >= 0 ? 'border-green-500' : 'border-red-500'}`}>
-                    <p className="text-xs font-black text-gray-400 uppercase tracking-widest">Resultado Líquido</p>
-                    <div className="flex items-center justify-between mt-2">
-                        <span className={`text-2xl font-black ${dreData.netProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>{formatCurrency(dreData.netProfit)}</span>
-                        {dreData.netProfit >= 0 ? <ArrowUpRight className="text-green-500" /> : <ArrowDownRight className="text-red-500" />}
-                    </div>
-                </div>
-                <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border-b-4 border-theme-darkblue">
-                    <p className="text-xs font-black text-gray-400 uppercase tracking-widest">Margem Líquida</p>
-                    <div className="flex items-center justify-between mt-2">
-                        <span className="text-2xl font-black text-theme-darkblue dark:text-blue-300">{dreData.margin.toFixed(1)}%</span>
-                        <PieIcon className="text-theme-darkblue" />
-                    </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12">
+                    <ParticipationBar 
+                        label="Dinheiro em Espécie" 
+                        value={totals.mix.cash} 
+                        total={totals.grossRevenue} 
+                        color="bg-theme-primary" 
+                        icon={Wallet} 
+                    />
+                    <ParticipationBar 
+                        label="Recebimentos via PIX" 
+                        value={totals.mix.pix} 
+                        total={totals.grossRevenue} 
+                        color="bg-theme-green" 
+                        icon={Smartphone} 
+                    />
+                    <ParticipationBar 
+                        label="Cartão de Débito" 
+                        value={totals.mix.debit} 
+                        total={totals.grossRevenue} 
+                        color="bg-blue-600" 
+                        icon={CreditCard} 
+                    />
+                    <ParticipationBar 
+                        label="Vendas no Crédito" 
+                        value={totals.mix.credit} 
+                        total={totals.grossRevenue} 
+                        color="bg-purple-600" 
+                        icon={LandmarkIcon} 
+                    />
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm h-[400px]">
-                    <h3 className="text-sm font-black text-gray-400 uppercase mb-6 tracking-widest">Composição de Custos e Receita</h3>
-                    <ResponsiveContainer width="100%" height="90%">
-                        <BarChart data={chartData}>
-                            <XAxis dataKey="name" fontSize={10} axisLine={false} tickLine={false} />
-                            <YAxis hide />
-                            <Tooltip formatter={(v: any) => formatCurrency(v)} />
-                            <Bar dataKey="value" radius={[8, 8, 0, 0]}>
-                                {chartData.map((entry, index) => <Cell key={index} fill={entry.color} />)}
-                            </Bar>
-                        </BarChart>
-                    </ResponsiveContainer>
+            {/* Resumo Analítico Adicional */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-2 bg-white dark:bg-gray-800 p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700">
+                    <h4 className="text-sm font-black text-gray-400 uppercase tracking-widest mb-6">Performance Financeira</h4>
+                    <div className="h-[250px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={[
+                                { name: 'Entradas', value: totals.grossRevenue, color: '#00843D' },
+                                { name: 'Saídas', value: totals.paidExpenses, color: '#ef4444' },
+                                { name: 'Saldo', value: totals.netBalance, color: '#1E3A63' },
+                            ]}>
+                                <XAxis dataKey="name" fontSize={10} axisLine={false} tickLine={false} />
+                                <Tooltip formatter={(v: any) => formatCurrency(v)} />
+                                <Bar dataKey="value" radius={[10, 10, 0, 0]}>
+                                    { [0,1,2].map((_, i) => <Cell key={i} fill={i === 0 ? '#00843D' : i === 1 ? '#ef4444' : '#1E3A63'} />) }
+                                </Bar>
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </div>
                 </div>
-
-                <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm">
-                    <h3 className="text-sm font-black text-gray-400 uppercase mb-4 tracking-widest">DRE Analítico (Mensal)</h3>
-                    <div className="space-y-4">
-                        <div className="flex justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl">
-                            <span className="font-bold text-gray-500">1. Receita Operacional Bruta</span>
-                            <span className="font-black text-green-600">{formatCurrency(dreData.revenue)}</span>
+                
+                <div className="bg-theme-darkblue p-6 rounded-3xl shadow-xl text-white flex flex-col justify-between">
+                    <div>
+                        <div className="p-3 bg-white/10 rounded-2xl w-fit mb-4">
+                            <LayoutDashboard size={24} />
                         </div>
-                        <div className="flex justify-between p-3 border-b dark:border-gray-700">
-                            <span className="text-sm font-medium text-gray-500">(-) CMV (Custo de Vendas)</span>
-                            <span className="text-sm font-bold text-red-500">({formatCurrency(dreData.cmv)})</span>
-                        </div>
-                        <div className="flex justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl">
-                            <span className="font-bold text-gray-500">2. Lucro Bruto</span>
-                            <span className="font-black text-gray-800 dark:text-gray-100">{formatCurrency(dreData.grossProfit)}</span>
-                        </div>
-                        <div className="flex justify-between p-3 border-b dark:border-gray-700">
-                            <span className="text-sm font-medium text-gray-500">(-) Despesas Administrativas</span>
-                            <span className="text-sm font-bold text-red-500">({formatCurrency(dreData.operationalExpenses)})</span>
-                        </div>
-                        <div className="flex justify-between p-3 border-b dark:border-gray-700">
-                            <span className="text-sm font-medium text-gray-500">(-) Folha de Pagamento / RH</span>
-                            <span className="text-sm font-bold text-red-500">({formatCurrency(dreData.staffCosts)})</span>
-                        </div>
-                        <div className="flex justify-between p-4 bg-theme-primary text-white rounded-xl shadow-lg">
-                            <span className="font-black uppercase tracking-tighter">Lucro Líquido do Exercício</span>
-                            <span className="font-black text-xl">{formatCurrency(dreData.netProfit)}</span>
+                        <h4 className="text-lg font-black uppercase tracking-tight">Performance Líquida</h4>
+                        <p className="text-[10px] font-bold text-white/60 uppercase mt-1">Margem Real de Operação</p>
+                    </div>
+                    
+                    <div className="py-6">
+                        <span className="text-4xl font-black">{((totals.netBalance / totals.grossRevenue) * 100 || 0).toFixed(1)}%</span>
+                        <p className="text-[10px] font-black uppercase mt-1 opacity-80">De cada R$ 1,00 vendido, este é o lucro que fica na empresa após as despesas.</p>
+                    </div>
+                    
+                    <div className="pt-4 border-t border-white/10">
+                        <div className="flex justify-between items-center text-xs font-bold uppercase">
+                            <span>Eficiência de Caixa</span>
+                            <span className="bg-theme-green px-2 py-0.5 rounded-full text-[10px] text-white">Excelente</span>
                         </div>
                     </div>
                 </div>
@@ -136,5 +187,60 @@ const DREDashboard: React.FC = () => {
         </div>
     );
 };
+
+// --- Subcomponentes de UI ---
+
+const DRECard: React.FC<{ label: string, value: number, icon: any, color: string, bgColor: string, isMain?: boolean }> = ({ label, value, icon: Icon, color, bgColor, isMain }) => (
+    <div className={`p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 transition-all hover:scale-[1.02] ${isMain ? 'bg-theme-primary text-white border-none' : 'bg-white dark:bg-gray-800'}`}>
+        <div className="flex justify-between items-start mb-4">
+            <div className={`p-3 rounded-2xl ${isMain ? 'bg-white/20' : bgColor}`}>
+                <Icon size={20} className={isMain ? 'text-white' : color} />
+            </div>
+            {value >= 0 ? <ArrowUpRight size={14} className={isMain ? 'text-white' : 'text-green-500'} /> : <ArrowDownRight size={14} className="text-red-500" />}
+        </div>
+        <p className={`text-[10px] font-black uppercase tracking-widest ${isMain ? 'text-white/70' : 'text-gray-400'}`}>{label}</p>
+        <p className={`text-xl font-black mt-1 ${isMain ? 'text-white' : 'text-gray-800 dark:text-gray-100'}`}>
+            {value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+        </p>
+    </div>
+);
+
+const ParticipationBar: React.FC<{ label: string, value: number, total: number, color: string, icon: any }> = ({ label, value, total, color, icon: Icon }) => {
+    const percent = total > 0 ? (value / total) * 100 : 0;
+    return (
+        <div className="space-y-4">
+            <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-gray-50 dark:bg-gray-900 rounded-xl text-gray-500">
+                    <Icon size={18} />
+                </div>
+                <div>
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none mb-1">{label}</p>
+                    <p className="text-sm font-black text-gray-800 dark:text-gray-100 leading-none">
+                        {value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    </p>
+                </div>
+            </div>
+            
+            <div className="relative pt-1">
+                <div className="overflow-hidden h-1.5 text-xs flex rounded-full bg-gray-100 dark:bg-gray-700">
+                    <div 
+                        style={{ width: `${percent}%` }}
+                        className={`shadow-none flex flex-col text-center white-space-nowrap text-white justify-center ${color} transition-all duration-1000`}
+                    ></div>
+                </div>
+                <div className="flex justify-between items-center mt-2">
+                    <span className="text-[9px] font-black text-gray-400 uppercase">Participação</span>
+                    <span className={`text-[10px] font-black ${percent > 0 ? 'text-theme-primary' : 'text-gray-400'}`}>{percent.toFixed(1)}%</span>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const CheckCircleIcon = (props: any) => <CheckCircle size={20} {...props} />;
+const ClockIcon = (props: any) => <Clock size={20} {...props} />;
+const LandmarkIcon = (props: any) => <Landmark size={20} {...props} />;
+
+import { CheckCircle, Clock, Landmark } from 'lucide-react';
 
 export default DREDashboard;

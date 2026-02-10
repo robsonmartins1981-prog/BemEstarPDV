@@ -1,9 +1,10 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { db } from '../../services/databaseService';
-import type { Supplier } from '../../types';
+import type { Supplier, Expense } from '../../types';
 import Button from '../shared/Button';
-import { PlusCircle, Edit, Trash2, Search, Truck, Phone, Mail, Globe } from 'lucide-react';
+import Modal from '../shared/Modal';
+import { PlusCircle, Edit, Trash2, Search, Truck, Phone, Mail, FileText, CheckCircle, Clock } from 'lucide-react';
 
 interface SupplierManagementProps {
     onNewSupplier: () => void;
@@ -13,6 +14,8 @@ interface SupplierManagementProps {
 const SupplierManagement: React.FC<SupplierManagementProps> = ({ onNewSupplier, onEditSupplier }) => {
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
+    const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
+    const [supplierExpenses, setSupplierExpenses] = useState<Expense[]>([]);
 
     const fetchSuppliers = useCallback(async () => {
         const all = await db.getAll('suppliers');
@@ -23,8 +26,16 @@ const SupplierManagement: React.FC<SupplierManagementProps> = ({ onNewSupplier, 
         fetchSuppliers();
     }, [fetchSuppliers]);
 
+    const handleSupplierClick = async (supplier: Supplier) => {
+        const allExpenses = await db.getAll('expenses');
+        const related = allExpenses.filter(e => e.supplierId === supplier.id)
+            .sort((a,b) => new Date(b.dueDate).getTime() - new Date(a.dueDate).getTime());
+        
+        setSupplierExpenses(related);
+        setSelectedSupplier(supplier);
+    };
+
     const handleDelete = async (id: string) => {
-        // Verifica se existem produtos vinculados
         const products = await db.getAll('products');
         const hasProducts = products.some(p => p.supplierId === id);
         
@@ -44,6 +55,8 @@ const SupplierManagement: React.FC<SupplierManagementProps> = ({ onNewSupplier, 
         s.cnpj.includes(searchTerm) ||
         s.contactPerson?.toLowerCase().includes(searchTerm.toLowerCase())
     );
+
+    const formatCurrency = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
     return (
         <div className="space-y-4">
@@ -75,7 +88,7 @@ const SupplierManagement: React.FC<SupplierManagementProps> = ({ onNewSupplier, 
                     </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                         {filteredSuppliers.map(supplier => (
-                            <tr key={supplier.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors group">
+                            <tr key={supplier.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors group cursor-pointer" onClick={() => handleSupplierClick(supplier)}>
                                 <td className="px-6 py-4">
                                     <div className="flex items-center gap-3">
                                         <div className="p-2 bg-gray-100 dark:bg-gray-900 rounded-lg text-gray-500">
@@ -102,7 +115,7 @@ const SupplierManagement: React.FC<SupplierManagementProps> = ({ onNewSupplier, 
                                         </div>
                                     )}
                                 </td>
-                                <td className="px-6 py-4 text-center">
+                                <td className="px-6 py-4 text-center" onClick={e => e.stopPropagation()}>
                                     <div className="flex justify-center gap-2">
                                         <Button variant="secondary" className="!p-2 h-auto" onClick={() => onEditSupplier(supplier.id)}>
                                             <Edit size={16}/>
@@ -123,6 +136,42 @@ const SupplierManagement: React.FC<SupplierManagementProps> = ({ onNewSupplier, 
                     </div>
                 )}
             </div>
+
+            {/* Modal de Detalhes de Contas do Fornecedor */}
+            <Modal
+                isOpen={!!selectedSupplier}
+                onClose={() => setSelectedSupplier(null)}
+                title={`Histórico de Contas: ${selectedSupplier?.name}`}
+            >
+                <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
+                    {supplierExpenses.length === 0 ? (
+                        <div className="text-center py-10 text-gray-400 uppercase text-[10px] font-black tracking-widest">
+                            Nenhum título lançado para este fornecedor.
+                        </div>
+                    ) : (
+                        supplierExpenses.map(expense => (
+                            <div key={expense.id} className="p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 flex justify-between items-center">
+                                <div>
+                                    <p className="font-bold text-xs uppercase text-gray-700 dark:text-gray-200">{expense.description}</p>
+                                    <p className="text-[10px] font-black text-gray-400 uppercase mt-1">Vencimento: {new Date(expense.dueDate).toLocaleDateString('pt-BR')}</p>
+                                </div>
+                                <div className="text-right">
+                                    <p className="font-mono font-black text-theme-primary">{formatCurrency(expense.amount)}</p>
+                                    {expense.status === 'PAID' ? (
+                                        <span className="inline-flex items-center gap-1 text-[8px] font-black text-green-600 bg-green-50 px-1.5 py-0.5 rounded uppercase">
+                                            <CheckCircle size={10}/> Pago
+                                        </span>
+                                    ) : (
+                                        <span className="inline-flex items-center gap-1 text-[8px] font-black text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded uppercase">
+                                            <Clock size={10}/> Pendente
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                        ))
+                    )}
+                </div>
+            </Modal>
         </div>
     );
 };

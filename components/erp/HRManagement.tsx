@@ -1,21 +1,16 @@
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { db } from '../../services/databaseService';
 import type { Employee } from '../../types';
 import Button from '../shared/Button';
-import Modal from '../shared/Modal';
-import { PlusCircle, Edit, Trash2, UserCog, Calendar, DollarSign, BadgeCheck, XCircle, Info, Umbrella, AlertTriangle, ChevronDown, ChevronUp, Clock, Coffee, LogIn, LogOut } from 'lucide-react';
-import { v4 as uuidv4 } from 'uuid';
+import { PlusCircle, Edit, Trash2, UserCog, DollarSign, BadgeCheck, XCircle, AlertTriangle, ChevronDown, ChevronUp, Clock } from 'lucide-react';
 
-interface RoleDetail {
-    id: string;
-    level: 'ESTRATEGICO' | 'TATICO' | 'OPERACIONAL';
-    title: string;
-    mission: string;
-    functions: string[];
+interface HRManagementProps {
+    onNewEmployee: () => void;
+    onEditEmployee: (id: string) => void;
 }
 
-const ROLE_DEFINITIONS: RoleDetail[] = [
+export const ROLE_DEFINITIONS = [
     {
         id: 'gerente_geral',
         level: 'ESTRATEGICO',
@@ -81,10 +76,8 @@ const ROLE_DEFINITIONS: RoleDetail[] = [
     }
 ];
 
-const HRManagement: React.FC = () => {
+const HRManagement: React.FC<HRManagementProps> = ({ onNewEmployee, onEditEmployee }) => {
     const [employees, setEmployees] = useState<Employee[]>([]);
-    const [isModalOpen, setIsModalOpen] = useState(false);
-    const [editingEmployee, setEditingEmployee] = useState<Partial<Employee> | null>(null);
     const [expandedInfo, setExpandedInfo] = useState<string | null>(null);
 
     const fetchEmployees = useCallback(async () => {
@@ -95,34 +88,6 @@ const HRManagement: React.FC = () => {
     useEffect(() => {
         fetchEmployees();
     }, [fetchEmployees]);
-
-    const handleSave = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!editingEmployee?.name || !editingEmployee?.roleId || editingEmployee?.salary === undefined) {
-            alert('Preencha todos os campos obrigatórios.');
-            return;
-        }
-
-        const employeeData: Employee = {
-            id: editingEmployee.id || uuidv4(),
-            name: editingEmployee.name,
-            roleId: editingEmployee.roleId,
-            salary: editingEmployee.salary,
-            status: editingEmployee.status || 'ACTIVE',
-            hireDate: editingEmployee.hireDate || new Date(),
-            contractEndDate: editingEmployee.contractEndDate,
-            lastVacationDate: editingEmployee.lastVacationDate,
-            shiftStart: editingEmployee.shiftStart,
-            lunchStart: editingEmployee.lunchStart,
-            lunchEnd: editingEmployee.lunchEnd,
-            shiftEnd: editingEmployee.shiftEnd,
-        };
-
-        await db.put('employees', employeeData);
-        setIsModalOpen(false);
-        setEditingEmployee(null);
-        fetchEmployees();
-    };
 
     const handleDelete = async (id: string) => {
         if (confirm('Deseja realmente remover este funcionário?')) {
@@ -159,10 +124,10 @@ const HRManagement: React.FC = () => {
             <div className="flex justify-between items-center">
                 <div>
                     <h2 className="text-2xl font-black text-gray-800 dark:text-gray-100 uppercase tracking-tight">Gestão de Equipe</h2>
-                    <p className="text-xs text-gray-500 font-bold uppercase tracking-widest">Manual de Cargos e Controle de Jornada</p>
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mt-1">Classificação de Cargos e Controle Administrativo</p>
                 </div>
-                <Button onClick={() => { setEditingEmployee({ hireDate: new Date(), status: 'ACTIVE' }); setIsModalOpen(true); }}>
-                    <PlusCircle size={18}/> Novo Funcionário
+                <Button onClick={onNewEmployee}>
+                    <PlusCircle size={18}/> Adicionar Colaborador
                 </Button>
             </div>
 
@@ -246,17 +211,17 @@ const HRManagement: React.FC = () => {
                             </div>
 
                             <div className="flex gap-2 pt-4 border-t dark:border-gray-700">
-                                <Button variant="secondary" className="flex-1 !p-2 h-auto" onClick={() => { setEditingEmployee(emp); setIsModalOpen(true); }}>
-                                    <Edit size={16}/>
+                                <Button variant="secondary" className="flex-1 !p-2 h-auto" onClick={() => onEditEmployee(emp.id)}>
+                                    <Edit size={16} className="mr-2"/> Editar Ficha
                                 </Button>
                                 <button 
                                     onClick={() => toggleStatus(emp)}
                                     title={emp.status === 'ACTIVE' ? 'Desativar' : 'Ativar'}
-                                    className={`flex-1 flex items-center justify-center p-2 rounded-lg transition-colors ${emp.status === 'ACTIVE' ? 'bg-orange-50 text-orange-600 hover:bg-orange-100' : 'bg-green-50 text-green-600 hover:bg-green-100'}`}
+                                    className={`flex items-center justify-center px-4 rounded-lg transition-colors ${emp.status === 'ACTIVE' ? 'bg-orange-50 text-orange-600 hover:bg-orange-100' : 'bg-green-50 text-green-600 hover:bg-green-100'}`}
                                 >
                                     {emp.status === 'ACTIVE' ? <XCircle size={18}/> : <BadgeCheck size={18}/>}
                                 </button>
-                                <Button variant="danger" className="flex-1 !p-2 h-auto" onClick={() => handleDelete(emp.id)}>
+                                <Button variant="danger" className="!p-2 h-auto" onClick={() => handleDelete(emp.id)}>
                                     <Trash2 size={16}/>
                                 </Button>
                             </div>
@@ -264,114 +229,12 @@ const HRManagement: React.FC = () => {
                     );
                 })}
             </div>
-
-            <Modal 
-                isOpen={isModalOpen} 
-                onClose={() => setIsModalOpen(false)} 
-                title={editingEmployee?.id ? 'Editar Ficha do Colaborador' : 'Nova Contratação'}
-            >
-                <form onSubmit={handleSave} className="space-y-4 max-h-[80vh] overflow-y-auto px-1">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="md:col-span-2">
-                            <label className="block text-[10px] font-black text-gray-400 uppercase mb-1 ml-1">Nome Completo</label>
-                            <input 
-                                type="text" 
-                                value={editingEmployee?.name || ''} 
-                                onChange={e => setEditingEmployee(p => ({...p!, name: e.target.value}))}
-                                className="w-full p-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-theme-primary outline-none"
-                                required
-                            />
-                        </div>
-                        <div className="md:col-span-2">
-                            <label className="block text-[10px] font-black text-gray-400 uppercase mb-1 ml-1">Cargo e Responsabilidades</label>
-                            <select 
-                                value={editingEmployee?.roleId || ''} 
-                                onChange={e => setEditingEmployee(p => ({...p!, roleId: e.target.value}))}
-                                className="w-full p-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-theme-primary outline-none"
-                                required
-                            >
-                                <option value="">Selecione o cargo...</option>
-                                {ROLE_DEFINITIONS.map(r => (
-                                    <option key={r.id} value={r.id}>{r.title} ({r.level})</option>
-                                ))}
-                            </select>
-                        </div>
-                        <div>
-                            <label className="block text-[10px] font-black text-gray-400 uppercase mb-1 ml-1">Salário Base (R$)</label>
-                            <input 
-                                type="number" 
-                                step="0.01"
-                                value={editingEmployee?.salary || ''} 
-                                onChange={e => setEditingEmployee(p => ({...p!, salary: parseFloat(e.target.value)}))}
-                                className="w-full p-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-theme-primary outline-none font-mono"
-                                required
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-[10px] font-black text-gray-400 uppercase mb-1 ml-1">Data de Admissão</label>
-                            <input 
-                                type="date" 
-                                value={editingEmployee?.hireDate ? new Date(editingEmployee.hireDate).toISOString().split('T')[0] : ''} 
-                                onChange={e => setEditingEmployee(p => ({...p!, hireDate: new Date(e.target.value)}))}
-                                className="w-full p-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-theme-primary outline-none"
-                                required
-                            />
-                        </div>
-
-                        {/* SEÇÃO DE JORNADA */}
-                        <div className="md:col-span-2 border-t dark:border-gray-700 pt-4 mt-2">
-                             <h4 className="flex items-center gap-2 text-xs font-black text-gray-500 uppercase tracking-widest mb-4">
-                                <Clock size={16} className="text-theme-primary"/> Jornada de Trabalho Diária
-                             </h4>
-                             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                <div>
-                                    <label className="block text-[10px] font-black text-gray-400 uppercase mb-1 flex items-center gap-1"><LogIn size={10}/> Entrada</label>
-                                    <input type="time" value={editingEmployee?.shiftStart || ''} onChange={e => setEditingEmployee(p => ({...p!, shiftStart: e.target.value}))} className="w-full p-2 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg font-mono text-sm outline-none focus:ring-2 focus:ring-theme-primary" />
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-black text-gray-400 uppercase mb-1 flex items-center gap-1"><Coffee size={10}/> Almoço Início</label>
-                                    <input type="time" value={editingEmployee?.lunchStart || ''} onChange={e => setEditingEmployee(p => ({...p!, lunchStart: e.target.value}))} className="w-full p-2 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg font-mono text-sm outline-none focus:ring-2 focus:ring-theme-primary" />
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-black text-gray-400 uppercase mb-1 flex items-center gap-1"><Coffee size={10}/> Almoço Fim</label>
-                                    <input type="time" value={editingEmployee?.lunchEnd || ''} onChange={e => setEditingEmployee(p => ({...p!, lunchEnd: e.target.value}))} className="w-full p-2 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg font-mono text-sm outline-none focus:ring-2 focus:ring-theme-primary" />
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-black text-gray-400 uppercase mb-1 flex items-center gap-1"><LogOut size={10}/> Saída Fim</label>
-                                    <input type="time" value={editingEmployee?.shiftEnd || ''} onChange={e => setEditingEmployee(p => ({...p!, shiftEnd: e.target.value}))} className="w-full p-2 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg font-mono text-sm outline-none focus:ring-2 focus:ring-theme-primary" />
-                                </div>
-                             </div>
-                        </div>
-
-                        <div className="md:col-span-2 border-t dark:border-gray-700 pt-4">
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-[10px] font-black text-gray-400 uppercase mb-1 ml-1">Término de Contrato</label>
-                                    <input 
-                                        type="date" 
-                                        value={editingEmployee?.contractEndDate ? new Date(editingEmployee.contractEndDate).toISOString().split('T')[0] : ''} 
-                                        onChange={e => setEditingEmployee(p => ({...p!, contractEndDate: new Date(e.target.value)}))}
-                                        className="w-full p-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-theme-primary outline-none"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-black text-gray-400 uppercase mb-1 ml-1">Últimas Férias</label>
-                                    <input 
-                                        type="date" 
-                                        value={editingEmployee?.lastVacationDate ? new Date(editingEmployee.lastVacationDate).toISOString().split('T')[0] : ''} 
-                                        onChange={e => setEditingEmployee(p => ({...p!, lastVacationDate: new Date(e.target.value)}))}
-                                        className="w-full p-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-theme-primary outline-none"
-                                    />
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div className="flex gap-2 pt-4">
-                        <Button type="button" variant="secondary" className="flex-1" onClick={() => setIsModalOpen(false)}>Cancelar</Button>
-                        <Button type="submit" variant="primary" className="flex-1">Salvar na Equipe</Button>
-                    </div>
-                </form>
-            </Modal>
+            {employees.length === 0 && (
+                <div className="text-center py-20 bg-white dark:bg-gray-800 rounded-3xl border-2 border-dashed border-gray-100">
+                    <UserCog size={48} className="mx-auto text-gray-200 mb-4" />
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Nenhum colaborador cadastrado no sistema</p>
+                </div>
+            )}
         </div>
     );
 };

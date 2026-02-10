@@ -80,7 +80,13 @@ export interface Employee {
     shiftStart?: string; 
     lunchStart?: string; 
     lunchEnd?: string;   
-    shiftEnd?: string;   
+    shiftEnd?: string;
+    // Novos campos solicitados:
+    cpf: string;
+    pis: string;
+    address: string;
+    phone: string;
+    cellphone: string;
 }
 
 export interface HistoricalCashEntry {

@@ -1,11 +1,10 @@
 
 import React, { useState, useEffect } from 'react';
-import { ShoppingCart, Users, BarChart, FileText, Boxes, ChevronDown, ChevronUp, ArrowLeft, BrainCircuit, Landmark, Wallet, FileCode, MapPin, Settings2, Truck } from 'lucide-react';
+import { ShoppingCart, Users, BarChart, FileText, Boxes, ChevronDown, ChevronUp, ArrowLeft, BrainCircuit, Landmark, Wallet, FileCode, MapPin, Settings2, Truck, Circle } from 'lucide-react';
 import { db } from '../../services/databaseService';
 import type { Category } from '../../types';
 import Button from '../shared/Button';
 
-// Importa os componentes de cada módulo do ERP
 import ProductManagement from './ProductManagement';
 import CategoryManagement from './CategoryManagement';
 import NFeImport from './NFeImport';
@@ -19,6 +18,7 @@ import ExpenseManagement from './ExpenseManagement';
 import ExpenseFormPage from './ExpenseFormPage';
 import DREDashboard from './DREDashboard';
 import HRManagement from './HRManagement';
+import EmployeeFormPage from './EmployeeFormPage';
 import CashAudit from './CashAudit';
 import DeliveryZones from './DeliveryZones';
 import GeneralSettings from './GeneralSettings';
@@ -38,17 +38,19 @@ type ERPView =
   | { type: 'customer_form', customerId?: string }
   | { type: 'category_form', categoryId?: string }
   | { type: 'expense_form', expenseId?: string }
-  | { type: 'supplier_form', supplierId?: string };
+  | { type: 'supplier_form', supplierId?: string }
+  | { type: 'employee_form', employeeId?: string };
 
 
 interface MenuItem { id: ActiveModule; label: string; }
-interface MenuModule { id: string; label: string; icon: React.ElementType; items: MenuItem[]; }
+interface MenuModule { id: string; label: string; icon: React.ElementType; items: MenuItem[]; color: string; }
 
 const menuModules: MenuModule[] = [
     {
         id: 'estrategico',
         label: 'Gestão Estratégica',
         icon: BrainCircuit,
+        color: 'text-purple-500',
         items: [
             { id: 'dre', label: 'Painel DRE / Lucro' },
             { id: 'cashAudit', label: 'Controle de Caixa' },
@@ -59,6 +61,7 @@ const menuModules: MenuModule[] = [
         id: 'estoque',
         label: 'Estoque',
         icon: Boxes,
+        color: 'text-blue-500',
         items: [
             { id: 'products', label: 'Produtos' },
             { id: 'categories', label: 'Categorias' },
@@ -66,11 +69,21 @@ const menuModules: MenuModule[] = [
         ],
     },
     {
-        id: 'compras',
-        label: 'Compras & Suprimentos',
-        icon: ShoppingCart,
+        id: 'financeiro',
+        label: 'Financeiro',
+        icon: BarChart,
+        color: 'text-theme-secondary',
         items: [
-            { id: 'suppliers', label: 'Fornecedores' },
+            { id: 'expenses', label: 'Contas a Pagar' },
+            { id: 'suppliers', label: 'Fornecedores (Credores)' },
+        ],
+    },
+    {
+        id: 'compras',
+        label: 'Compras',
+        icon: ShoppingCart,
+        color: 'text-theme-primary',
+        items: [
             { id: 'generateOrder', label: 'Sugestão de Pedidos' },
             { id: 'nfeImport', label: 'Importar NF-e XML' },
         ],
@@ -79,20 +92,14 @@ const menuModules: MenuModule[] = [
         id: 'clientes',
         label: 'Clientes',
         icon: Users,
+        color: 'text-teal-500',
         items: [ { id: 'customers', label: 'Base de Clientes' } ],
-    },
-    {
-        id: 'financeiro',
-        label: 'Financeiro',
-        icon: BarChart,
-        items: [
-            { id: 'expenses', label: 'Contas a Pagar' },
-        ],
     },
     {
         id: 'configuracoes',
         label: 'Configurações',
         icon: Settings2,
+        color: 'text-gray-500',
         items: [
             { id: 'generalSettings', label: 'Backup e WhatsApp' },
             { id: 'deliveryZones', label: 'Bairros e Fretes' },
@@ -102,7 +109,7 @@ const menuModules: MenuModule[] = [
 
 const ERPScreen: React.FC<ERPScreenProps> = ({ setView }) => {
     const [currentErpView, setCurrentErpView] = useState<ERPView>({ type: 'module', id: 'dre' }); 
-    const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['estrategico', 'estoque', 'compras', 'financeiro', 'configuracoes']));
+    const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['estrategico', 'estoque', 'financeiro', 'compras']));
     const [categories, setCategories] = useState<Category[]>([]);
 
     useEffect(() => {
@@ -125,10 +132,11 @@ const ERPScreen: React.FC<ERPScreenProps> = ({ setView }) => {
             case 'category_form': return <CategoryFormPage categoryId={currentErpView.categoryId} onBack={() => setCurrentErpView({ type: 'module', id: 'categories' })} />;
             case 'expense_form': return <ExpenseFormPage expenseId={currentErpView.expenseId} onBack={() => setCurrentErpView({ type: 'module', id: 'expenses' })} />;
             case 'supplier_form': return <SupplierFormPage supplierId={currentErpView.supplierId} onBack={() => setCurrentErpView({ type: 'module', id: 'suppliers' })} />;
+            case 'employee_form': return <EmployeeFormPage employeeId={currentErpView.employeeId} onBack={() => setCurrentErpView({ type: 'module', id: 'hr' })} />;
             case 'module':
                 switch(currentErpView.id) {
                     case 'dre': return <DREDashboard />;
-                    case 'hr': return <HRManagement />;
+                    case 'hr': return <HRManagement onNewEmployee={() => setCurrentErpView({ type: 'employee_form' })} onEditEmployee={(id) => setCurrentErpView({ type: 'employee_form', employeeId: id })} />;
                     case 'cashAudit': return <CashAudit />;
                     case 'deliveryZones': return <DeliveryZones />;
                     case 'generalSettings': return <GeneralSettings />;
@@ -162,6 +170,8 @@ const ERPScreen: React.FC<ERPScreenProps> = ({ setView }) => {
                 return { title: 'Editar Despesa', activeModule: 'expenses' as ActiveModule, backAction: () => setCurrentErpView({ type: 'module', id: 'expenses' }) };
             case 'supplier_form':
                 return { title: 'Editar Fornecedor', activeModule: 'suppliers' as ActiveModule, backAction: () => setCurrentErpView({ type: 'module', id: 'suppliers' }) };
+            case 'employee_form':
+                return { title: 'Ficha do Colaborador', activeModule: 'hr' as ActiveModule, backAction: () => setCurrentErpView({ type: 'module', id: 'hr' }) };
             default:
                 return { title: 'ERP', activeModule: 'dre' as ActiveModule, backAction: null as (() => void) | null };
         }
@@ -170,43 +180,92 @@ const ERPScreen: React.FC<ERPScreenProps> = ({ setView }) => {
 
     return (
         <div className="flex flex-col md:flex-row h-full bg-gray-100 dark:bg-gray-900">
+            {/* SIDEBAR */}
             <aside className="w-full md:w-64 bg-white dark:bg-gray-800 shadow-md md:shadow-none md:border-r dark:border-gray-700 flex flex-col order-1 shrink-0 overflow-y-auto">
-                <div className="hidden md:block p-4 border-b dark:border-gray-700">
-                    <h1 className="text-xl font-bold text-gray-800 dark:text-gray-100 uppercase tracking-tighter">Gestão BI</h1>
-                    <span className="text-[10px] font-black text-theme-primary">BEMESTAR v2.0</span>
+                <div className="hidden md:block p-6 border-b dark:border-gray-700">
+                    <h1 className="text-xl font-black text-gray-800 dark:text-gray-100 uppercase tracking-tighter">Gestão BI</h1>
+                    <div className="flex items-center gap-1 mt-1">
+                        <span className="h-1.5 w-1.5 rounded-full bg-theme-primary animate-pulse"></span>
+                        <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Sessão Ativa</span>
+                    </div>
                 </div>
-                <nav className="flex-grow md:p-2">
-                    <ul className="flex flex-col md:p-0 gap-1">
-                        {menuModules.map(module => {
-                            const isExpanded = expandedSections.has(module.id);
-                            return (
-                                <li key={module.id} className="flex flex-col">
-                                    <button onClick={() => toggleSection(module.id)} className="flex items-center justify-between w-full gap-3 px-4 py-2 rounded-md text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-theme-primary transition-all">
-                                        <div className="flex items-center gap-3"><module.icon className="w-4 h-4" /><span>{module.label}</span></div>
-                                        {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                                    </button>
-                                    <ul className={`flex flex-col gap-1 pl-6 mt-1 mb-2 ${!isExpanded ? 'hidden' : ''}`}>
-                                        {module.items.map(item => (
-                                            <li key={item.id}>
-                                                <a href="#" onClick={(e) => { e.preventDefault(); setCurrentErpView({ type: 'module', id: item.id }); }} 
-                                                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${activeModule === item.id ? 'bg-theme-primary text-white' : 'text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700 dark:text-gray-400'}`}>
-                                                    <span>{item.label}</span>
-                                                </a>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                </li>
-                            );
-                        })}
-                    </ul>
+
+                <nav className="flex-grow p-3 space-y-1">
+                    {menuModules.map(module => {
+                        const isExpanded = expandedSections.has(module.id);
+                        const hasActiveChild = module.items.some(i => i.id === activeModule);
+                        
+                        return (
+                            <div key={module.id} className="flex flex-col mb-2">
+                                <button 
+                                    onClick={() => toggleSection(module.id)} 
+                                    className={`flex items-center justify-between w-full gap-3 px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${hasActiveChild ? 'text-gray-800 dark:text-white bg-gray-50 dark:bg-gray-700/30' : 'text-gray-400 hover:text-theme-primary'}`}
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <module.icon className={`w-4 h-4 ${hasActiveChild ? module.color : 'text-gray-400'}`} />
+                                        <span>{module.label}</span>
+                                    </div>
+                                    {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                                </button>
+
+                                <div className={`flex flex-col gap-1 mt-1 relative ml-4 ${!isExpanded ? 'hidden' : ''}`}>
+                                    {/* Linha guia vertical */}
+                                    <div className="absolute left-0 top-0 bottom-0 w-px bg-gray-100 dark:bg-gray-700 ml-1.5"></div>
+                                    
+                                    {module.items.map(item => {
+                                        const isActive = activeModule === item.id;
+                                        return (
+                                            <a 
+                                                key={item.id} 
+                                                href="#" 
+                                                onClick={(e) => { e.preventDefault(); setCurrentErpView({ type: 'module', id: item.id }); }} 
+                                                className={`group flex items-center justify-between pl-6 pr-3 py-2 rounded-lg text-xs font-bold transition-all relative ${isActive ? 'bg-theme-primary text-white shadow-lg shadow-theme-primary/20 translate-x-1' : 'text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700 dark:text-gray-400 hover:translate-x-1'}`}
+                                            >
+                                                {/* Marcador Ativo (Highlight) */}
+                                                {isActive && <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-white rounded-full ml-1 animate-in fade-in zoom-in"></div>}
+                                                
+                                                <span>{item.label}</span>
+                                                {isActive && <Circle size={4} fill="white" className="opacity-50" />}
+                                            </a>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        );
+                    })}
                 </nav>
+
+                <div className="p-4 border-t dark:border-gray-700 mt-auto">
+                    <div className="bg-gray-50 dark:bg-gray-900 rounded-2xl p-4">
+                        <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Versão do Sistema</p>
+                        <p className="text-[10px] font-bold text-theme-primary">BEMESTAR v2.5.0 PRO</p>
+                    </div>
+                </div>
             </aside>
+
+            {/* MAIN CONTENT AREA */}
             <main className="flex-1 flex flex-col overflow-hidden order-2 h-full">
                 <header className="bg-white dark:bg-gray-800 shadow-sm p-4 flex items-center gap-4 shrink-0">
-                    {backAction && <Button variant="secondary" onClick={backAction} className="!py-2 !px-3"><ArrowLeft size={16} className="mr-2"/> Voltar</Button>}
-                    <h2 className="text-xl md:text-2xl font-black text-gray-800 dark:text-gray-100 capitalize truncate tracking-tight">{title}</h2>
+                    {backAction && (
+                        <button 
+                            onClick={backAction} 
+                            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors text-theme-primary"
+                        >
+                            <ArrowLeft size={20} />
+                        </button>
+                    )}
+                    <div>
+                        <h2 className="text-xl md:text-2xl font-black text-gray-800 dark:text-gray-100 capitalize truncate tracking-tight">
+                            {title}
+                        </h2>
+                        {currentErpView.type === 'module' && (
+                            <p className="text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] hidden md:block">
+                                Gestão Bem Estar / Módulo {menuModules.find(m => m.items.some(i => i.id === activeModule))?.label}
+                            </p>
+                        )}
+                    </div>
                 </header>
-                <div className="flex-1 overflow-y-auto p-4 md:p-6">
+                <div className="flex-1 overflow-y-auto p-4 md:p-6 custom-scrollbar">
                     {activeModule === 'dre' && <ValidityAlertBanner onAction={() => setCurrentErpView({ type: 'module', id: 'inventory' })} />}
                     {renderActiveModule()}
                 </div>
