@@ -13,6 +13,17 @@ export enum OrderType {
   ENTREGA = 'Entrega'
 }
 
+export type UserRole = 'ADMIN' | 'OPERATOR';
+
+export interface User {
+    id: string;
+    username: string;
+    password?: string;
+    role: UserRole;
+    permissions: ('pos' | 'erp' | 'crm' | 'fiscal')[];
+    active: boolean;
+}
+
 export interface Product {
   id: string; // Código Interno do Produto
   barcode?: string; // Código de Barras (EAN/GTIN)
@@ -81,7 +92,6 @@ export interface Employee {
     lunchStart?: string; 
     lunchEnd?: string;   
     shiftEnd?: string;
-    // Novos campos solicitados:
     cpf: string;
     pis: string;
     address: string;

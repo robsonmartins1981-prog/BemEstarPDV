@@ -1,7 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import { ShoppingCart, Users, BarChart, FileText, Boxes, ChevronDown, ChevronUp, ArrowLeft, BrainCircuit, Landmark, Wallet, FileCode, MapPin, Settings2, Truck, Circle } from 'lucide-react';
+import { ShoppingCart, Users, BarChart, FileText, Boxes, ChevronDown, ChevronUp, ArrowLeft, BrainCircuit, Landmark, Wallet, FileCode, MapPin, Settings2, Truck, Circle, ShieldCheck, UserPlus } from 'lucide-react';
 import { db } from '../../services/databaseService';
+import { useAuth } from '../../App';
 import type { Category } from '../../types';
 import Button from '../shared/Button';
 
@@ -25,12 +26,14 @@ import GeneralSettings from './GeneralSettings';
 import ValidityAlertBanner from './ValidityAlertBanner';
 import SupplierManagement from './SupplierManagement';
 import SupplierFormPage from './SupplierFormPage';
+import UserManagement from './UserManagement';
+import UserFormPage from './UserFormPage';
 
 interface ERPScreenProps {
     setView: (view: 'pos' | 'erp' | 'crm' | 'fiscal') => void;
 }
 
-type ActiveModule = 'products' | 'categories' | 'customers' | 'suppliers' | 'financial' | 'expenses' | 'reports' | 'nfeImport' | 'inventory' | 'generateOrder' | 'dre' | 'hr' | 'cashAudit' | 'deliveryZones' | 'generalSettings';
+type ActiveModule = 'products' | 'categories' | 'customers' | 'suppliers' | 'financial' | 'expenses' | 'reports' | 'nfeImport' | 'inventory' | 'generateOrder' | 'dre' | 'hr' | 'cashAudit' | 'deliveryZones' | 'generalSettings' | 'users';
 
 type ERPView = 
   | { type: 'module', id: ActiveModule }
@@ -39,11 +42,12 @@ type ERPView =
   | { type: 'category_form', categoryId?: string }
   | { type: 'expense_form', expenseId?: string }
   | { type: 'supplier_form', supplierId?: string }
-  | { type: 'employee_form', employeeId?: string };
+  | { type: 'employee_form', employeeId?: string }
+  | { type: 'user_form', userId?: string };
 
 
 interface MenuItem { id: ActiveModule; label: string; }
-interface MenuModule { id: string; label: string; icon: React.ElementType; items: MenuItem[]; color: string; }
+interface MenuModule { id: string; label: string; icon: React.ElementType; items: MenuItem[]; color: string; adminOnly?: boolean; }
 
 const menuModules: MenuModule[] = [
     {
@@ -55,6 +59,17 @@ const menuModules: MenuModule[] = [
             { id: 'dre', label: 'Painel DRE / Lucro' },
             { id: 'cashAudit', label: 'Controle de Caixa' },
             { id: 'hr', label: 'Equipe e RH' },
+        ],
+    },
+    {
+        id: 'seguranca',
+        label: 'Sistema e Acessos',
+        icon: ShieldCheck,
+        color: 'text-red-500',
+        adminOnly: true,
+        items: [
+            { id: 'users', label: 'Usuários e Permissões' },
+            { id: 'generalSettings', label: 'Backup eWhatsApp' },
         ],
     },
     {
@@ -97,19 +112,19 @@ const menuModules: MenuModule[] = [
     },
     {
         id: 'configuracoes',
-        label: 'Configurações',
+        label: 'Logística',
         icon: Settings2,
         color: 'text-gray-500',
         items: [
-            { id: 'generalSettings', label: 'Backup e WhatsApp' },
             { id: 'deliveryZones', label: 'Bairros e Fretes' },
         ],
     },
 ];
 
 const ERPScreen: React.FC<ERPScreenProps> = ({ setView }) => {
+    const { user: currentUser } = useAuth();
     const [currentErpView, setCurrentErpView] = useState<ERPView>({ type: 'module', id: 'dre' }); 
-    const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['estrategico', 'estoque', 'financeiro', 'compras']));
+    const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['estrategico', 'seguranca', 'estoque']));
     const [categories, setCategories] = useState<Category[]>([]);
 
     useEffect(() => {
@@ -133,10 +148,12 @@ const ERPScreen: React.FC<ERPScreenProps> = ({ setView }) => {
             case 'expense_form': return <ExpenseFormPage expenseId={currentErpView.expenseId} onBack={() => setCurrentErpView({ type: 'module', id: 'expenses' })} />;
             case 'supplier_form': return <SupplierFormPage supplierId={currentErpView.supplierId} onBack={() => setCurrentErpView({ type: 'module', id: 'suppliers' })} />;
             case 'employee_form': return <EmployeeFormPage employeeId={currentErpView.employeeId} onBack={() => setCurrentErpView({ type: 'module', id: 'hr' })} />;
+            case 'user_form': return <UserFormPage userId={currentErpView.userId} onBack={() => setCurrentErpView({ type: 'module', id: 'users' })} />;
             case 'module':
                 switch(currentErpView.id) {
                     case 'dre': return <DREDashboard />;
                     case 'hr': return <HRManagement onNewEmployee={() => setCurrentErpView({ type: 'employee_form' })} onEditEmployee={(id) => setCurrentErpView({ type: 'employee_form', employeeId: id })} />;
+                    case 'users': return <UserManagement onNewUser={() => setCurrentErpView({ type: 'user_form' })} onEditUser={(id) => setCurrentErpView({ type: 'user_form', userId: id })} />;
                     case 'cashAudit': return <CashAudit />;
                     case 'deliveryZones': return <DeliveryZones />;
                     case 'generalSettings': return <GeneralSettings />;
@@ -160,27 +177,20 @@ const ERPScreen: React.FC<ERPScreenProps> = ({ setView }) => {
         }
         
         switch(currentErpView.type) {
-            case 'product_form': 
-                return { title: 'Editar Produto', activeModule: 'products' as ActiveModule, backAction: () => setCurrentErpView({ type: 'module', id: 'products' }) };
-            case 'customer_form': 
-                return { title: 'Editar Cliente', activeModule: 'customers' as ActiveModule, backAction: () => setCurrentErpView({ type: 'module', id: 'customers' }) };
-            case 'category_form': 
-                return { title: 'Editar Categoria', activeModule: 'categories' as ActiveModule, backAction: () => setCurrentErpView({ type: 'module', id: 'categories' }) };
-            case 'expense_form': 
-                return { title: 'Editar Despesa', activeModule: 'expenses' as ActiveModule, backAction: () => setCurrentErpView({ type: 'module', id: 'expenses' }) };
-            case 'supplier_form':
-                return { title: 'Editar Fornecedor', activeModule: 'suppliers' as ActiveModule, backAction: () => setCurrentErpView({ type: 'module', id: 'suppliers' }) };
-            case 'employee_form':
-                return { title: 'Ficha do Colaborador', activeModule: 'hr' as ActiveModule, backAction: () => setCurrentErpView({ type: 'module', id: 'hr' }) };
-            default:
-                return { title: 'ERP', activeModule: 'dre' as ActiveModule, backAction: null as (() => void) | null };
+            case 'product_form': return { title: 'Editar Produto', activeModule: 'products' as ActiveModule, backAction: () => setCurrentErpView({ type: 'module', id: 'products' }) };
+            case 'customer_form': return { title: 'Editar Cliente', activeModule: 'customers' as ActiveModule, backAction: () => setCurrentErpView({ type: 'module', id: 'customers' }) };
+            case 'category_form': return { title: 'Editar Categoria', activeModule: 'categories' as ActiveModule, backAction: () => setCurrentErpView({ type: 'module', id: 'categories' }) };
+            case 'expense_form': return { title: 'Editar Despesa', activeModule: 'expenses' as ActiveModule, backAction: () => setCurrentErpView({ type: 'module', id: 'expenses' }) };
+            case 'supplier_form': return { title: 'Editar Fornecedor', activeModule: 'suppliers' as ActiveModule, backAction: () => setCurrentErpView({ type: 'module', id: 'suppliers' }) };
+            case 'employee_form': return { title: 'Ficha do Colaborador', activeModule: 'hr' as ActiveModule, backAction: () => setCurrentErpView({ type: 'module', id: 'hr' }) };
+            case 'user_form': return { title: 'Configurar Operador', activeModule: 'users' as ActiveModule, backAction: () => setCurrentErpView({ type: 'module', id: 'users' }) };
+            default: return { title: 'ERP', activeModule: 'dre' as ActiveModule, backAction: null as (() => void) | null };
         }
     };
     const { title, activeModule, backAction } = getHeaderInfo();
 
     return (
         <div className="flex flex-col md:flex-row h-full bg-gray-100 dark:bg-gray-900">
-            {/* SIDEBAR */}
             <aside className="w-full md:w-64 bg-white dark:bg-gray-800 shadow-md md:shadow-none md:border-r dark:border-gray-700 flex flex-col order-1 shrink-0 overflow-y-auto">
                 <div className="hidden md:block p-6 border-b dark:border-gray-700">
                     <h1 className="text-xl font-black text-gray-800 dark:text-gray-100 uppercase tracking-tighter">Gestão BI</h1>
@@ -191,7 +201,7 @@ const ERPScreen: React.FC<ERPScreenProps> = ({ setView }) => {
                 </div>
 
                 <nav className="flex-grow p-3 space-y-1">
-                    {menuModules.map(module => {
+                    {menuModules.filter(m => !m.adminOnly || currentUser?.role === 'ADMIN').map(module => {
                         const isExpanded = expandedSections.has(module.id);
                         const hasActiveChild = module.items.some(i => i.id === activeModule);
                         
@@ -209,9 +219,7 @@ const ERPScreen: React.FC<ERPScreenProps> = ({ setView }) => {
                                 </button>
 
                                 <div className={`flex flex-col gap-1 mt-1 relative ml-4 ${!isExpanded ? 'hidden' : ''}`}>
-                                    {/* Linha guia vertical */}
                                     <div className="absolute left-0 top-0 bottom-0 w-px bg-gray-100 dark:bg-gray-700 ml-1.5"></div>
-                                    
                                     {module.items.map(item => {
                                         const isActive = activeModule === item.id;
                                         return (
@@ -221,9 +229,7 @@ const ERPScreen: React.FC<ERPScreenProps> = ({ setView }) => {
                                                 onClick={(e) => { e.preventDefault(); setCurrentErpView({ type: 'module', id: item.id }); }} 
                                                 className={`group flex items-center justify-between pl-6 pr-3 py-2 rounded-lg text-xs font-bold transition-all relative ${isActive ? 'bg-theme-primary text-white shadow-lg shadow-theme-primary/20 translate-x-1' : 'text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700 dark:text-gray-400 hover:translate-x-1'}`}
                                             >
-                                                {/* Marcador Ativo (Highlight) */}
                                                 {isActive && <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-white rounded-full ml-1 animate-in fade-in zoom-in"></div>}
-                                                
                                                 <span>{item.label}</span>
                                                 {isActive && <Circle size={4} fill="white" className="opacity-50" />}
                                             </a>
@@ -237,13 +243,12 @@ const ERPScreen: React.FC<ERPScreenProps> = ({ setView }) => {
 
                 <div className="p-4 border-t dark:border-gray-700 mt-auto">
                     <div className="bg-gray-50 dark:bg-gray-900 rounded-2xl p-4">
-                        <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Versão do Sistema</p>
-                        <p className="text-[10px] font-bold text-theme-primary">BEMESTAR v2.5.0 PRO</p>
+                        <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Operador Logado</p>
+                        <p className="text-[10px] font-bold text-theme-primary uppercase">{currentUser?.username}</p>
                     </div>
                 </div>
             </aside>
 
-            {/* MAIN CONTENT AREA */}
             <main className="flex-1 flex flex-col overflow-hidden order-2 h-full">
                 <header className="bg-white dark:bg-gray-800 shadow-sm p-4 flex items-center gap-4 shrink-0">
                     {backAction && (

@@ -1,7 +1,7 @@
 
 // services/databaseService.ts
 import { openDB, type IDBPDatabase, type DBSchema } from 'idb';
-import type { Product, Sale, CashSession, Supplier, Customer, Expense, Segment, Campaign, AutomationRule, InventoryLot, InventoryAdjustment, ParkedSale, Category, Coupon, FiscalConfig, SyncJob, Employee, AuditLog, FinancialEntry, HistoricalCashEntry, DeliveryZone, StoreSettings } from '../types';
+import type { Product, Sale, CashSession, Supplier, Customer, Expense, Segment, Campaign, AutomationRule, InventoryLot, InventoryAdjustment, ParkedSale, Category, Coupon, FiscalConfig, SyncJob, Employee, AuditLog, FinancialEntry, HistoricalCashEntry, DeliveryZone, StoreSettings, User } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 
 interface AppDB extends DBSchema {
@@ -27,6 +27,7 @@ interface AppDB extends DBSchema {
   financialEntries: { key: string; value: FinancialEntry; indexes: { date: Date, type: string, category: string }; };
   deliveryZones: { key: string; value: DeliveryZone; indexes: { neighborhood: string }; };
   storeSettings: { key: string; value: StoreSettings; };
+  users: { key: string; value: User; indexes: { username: string }; };
 }
 
 let db: IDBPDatabase<AppDB>;
@@ -34,7 +35,7 @@ let db: IDBPDatabase<AppDB>;
 export async function initDB() {
   if (db) return; 
 
-  db = await openDB<AppDB>('BemEstarPDV', 19, {
+  db = await openDB<AppDB>('BemEstarPDV', 20, {
     upgrade(database, oldVersion, newVersion, transaction) {
       if (oldVersion < 1) {
         database.createObjectStore('products', { keyPath: 'id' }).createIndex('name', 'name');
@@ -67,8 +68,32 @@ export async function initDB() {
       if (!database.objectStoreNames.contains('storeSettings')) {
         database.createObjectStore('storeSettings', { keyPath: 'id' });
       }
+      if (!database.objectStoreNames.contains('users')) {
+        database.createObjectStore('users', { keyPath: 'id' }).createIndex('username', 'username');
+      }
     },
   });
+
+  // Seed Initial Users if not exists
+  const userCount = await db.count('users');
+  if (userCount === 0) {
+      await db.add('users', {
+          id: uuidv4(),
+          username: 'admin',
+          password: '1234',
+          role: 'ADMIN',
+          permissions: ['pos', 'erp', 'crm', 'fiscal'],
+          active: true
+      });
+      await db.add('users', {
+          id: uuidv4(),
+          username: 'defalt',
+          password: '1234',
+          role: 'OPERATOR',
+          permissions: ['pos'],
+          active: true
+      });
+  }
 }
 
 export async function exportFullBackup() {
