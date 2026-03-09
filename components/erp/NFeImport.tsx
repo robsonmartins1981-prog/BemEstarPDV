@@ -333,7 +333,7 @@ const NFeImport: React.FC = () => {
                         </div>
                         <div className="mt-2 text-xs text-gray-500 flex items-center gap-2">
                             <AlertTriangle size={14} className="text-yellow-600"/>
-                            <span>O <strong>Fator de Conversão</strong> define quantas unidades de venda existem em 1 unidade de compra da nota. (Ex: 1 Cx c/ 12 un -> Fator: 12)</span>
+                            <span>O <strong>Fator de Conversão</strong> define quantas unidades de venda existem em 1 unidade de compra da nota. (Ex: 1 Cx c/ 12 un -&gt; Fator: 12)</span>
                         </div>
                     </div>
                     

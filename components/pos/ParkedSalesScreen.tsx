@@ -4,20 +4,23 @@ import Button from '../shared/Button';
 import { db } from '../../services/databaseService';
 import type { ParkedSale, StoreSettings } from '../../types';
 import { OrderType } from '../../types';
-import { Store, Truck, MapPin, Phone, ShoppingCart, Search, Trash2, ArrowLeft, MessageCircle, Printer, MapPinned } from 'lucide-react';
+import { Store, Truck, MapPin, Phone, ShoppingCart, Search, Trash2, ArrowLeft, MessageCircle, Printer, MapPinned, Edit } from 'lucide-react';
+import EditDeliveryModal from './EditDeliveryModal';
 
 interface ParkedSalesScreenProps {
   onBack: () => void;
   onLoadSale: (sale: ParkedSale) => void;
+  onFinalizeDelivery: (sale: ParkedSale) => void;
 }
 
 const formatCurrency = (value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const formatDateTime = (date: Date) => date.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
 
-const ParkedSalesScreen: React.FC<ParkedSalesScreenProps> = ({ onBack, onLoadSale }) => {
+const ParkedSalesScreen: React.FC<ParkedSalesScreenProps> = ({ onBack, onLoadSale, onFinalizeDelivery }) => {
     const [parkedSales, setParkedSales] = useState<ParkedSale[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [settings, setSettings] = useState<StoreSettings | null>(null);
+    const [editingSale, setEditingSale] = useState<ParkedSale | null>(null);
 
     const fetchSales = async () => {
         const sales = await db.getAllFromIndex('parkedSales', 'createdAt');
@@ -137,6 +140,13 @@ const ParkedSalesScreen: React.FC<ParkedSalesScreenProps> = ({ onBack, onLoadSal
         if (sale.notes) {
             text += `📝 *OBSERVAÇÃO:* ${sale.notes}\n`;
         }
+        
+        if (sale.payments && sale.payments.length > 0) {
+            text += `\n*PAGAMENTO NA ENTREGA:*\n`;
+            sale.payments.forEach(p => {
+                text += `💳 ${p.method}: ${formatCurrency(p.amount)}\n`;
+            });
+        }
 
         const encodedText = encodeURIComponent(text);
         
@@ -148,6 +158,18 @@ const ParkedSalesScreen: React.FC<ParkedSalesScreenProps> = ({ onBack, onLoadSal
             : `https://wa.me/?text=${encodedText}`;
         
         window.open(whatsappUrl, '_blank');
+    };
+
+    const handleSaveDelivery = async (updatedSale: ParkedSale) => {
+        await db.put('parkedSales', updatedSale);
+        setEditingSale(null);
+        fetchSales();
+    };
+
+    const handleCompleteDelivery = async (updatedSale: ParkedSale) => {
+        await onFinalizeDelivery(updatedSale);
+        setEditingSale(null);
+        fetchSales();
     };
 
     const filteredSales = parkedSales.filter(s => 
@@ -233,6 +255,9 @@ const ParkedSalesScreen: React.FC<ParkedSalesScreenProps> = ({ onBack, onLoadSal
                               </div>
 
                               <div className="flex gap-2 pt-2 mt-auto">
+                                  <Button variant="secondary" className="!p-3" onClick={() => setEditingSale(sale)} title="Gerenciar Entrega">
+                                      <Truck size={20} />
+                                  </Button>
                                   <Button variant="danger" className="!p-3" onClick={() => handleDelete(sale.id)} title="Excluir Pedido">
                                       <Trash2 size={20} />
                                   </Button>
@@ -267,6 +292,14 @@ const ParkedSalesScreen: React.FC<ParkedSalesScreenProps> = ({ onBack, onLoadSal
                   </Button>
               </div>
             </div>
+            
+            <EditDeliveryModal 
+                isOpen={!!editingSale} 
+                onClose={() => setEditingSale(null)} 
+                sale={editingSale} 
+                onSave={handleSaveDelivery} 
+                onComplete={handleCompleteDelivery}
+            />
         </div>
     );
 };

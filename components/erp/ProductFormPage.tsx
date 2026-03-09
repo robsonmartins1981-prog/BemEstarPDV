@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { db } from '../../services/databaseService';
 import type { Product, Category, Supplier, InventoryLot } from '../../types';
 import Button from '../shared/Button';
-import { ImageOff, ReceiptText, Save, History, TrendingUp, TrendingDown, Minus, Upload, X, ImageIcon, Calendar, Boxes, Tag, Hash, Barcode } from 'lucide-react';
+import { ImageOff, ReceiptText, Save, History, TrendingUp, TrendingDown, Minus, Upload, X, ImageIcon, Calendar, Boxes, Tag, Hash, Barcode, PackagePlus, Plus, Trash2 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 interface ProductFormPageProps {
@@ -15,8 +15,11 @@ interface ProductFormPageProps {
 const ProductFormPage: React.FC<ProductFormPageProps> = ({ productId, categories, onBack }) => {
     const [formData, setFormData] = useState<Partial<Product>>({});
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+    const [allProducts, setAllProducts] = useState<Product[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('main');
+    
+    const [kitItemInput, setKitItemInput] = useState({ productId: '', quantity: 1 });
     
     const [initialLot, setInitialLot] = useState({
         number: 'LOTE-' + new Date().getFullYear() + '-' + Math.floor(Math.random() * 1000),
@@ -28,8 +31,12 @@ const ProductFormPage: React.FC<ProductFormPageProps> = ({ productId, categories
     useEffect(() => {
         const fetchData = async () => {
             setIsLoading(true);
-            const allSuppliers = await db.getAll('suppliers');
+            const [allSuppliers, products] = await Promise.all([
+                db.getAll('suppliers'),
+                db.getAll('products')
+            ]);
             setSuppliers(allSuppliers.sort((a,b) => a.name.localeCompare(b.name)));
+            setAllProducts(products.sort((a,b) => a.name.localeCompare(b.name)));
 
             if (productId) {
                 const product = await db.get('products', productId);
@@ -57,6 +64,8 @@ const ProductFormPage: React.FC<ProductFormPageProps> = ({ productId, categories
                     image: '',
                     categoryId: '',
                     supplierId: '',
+                    isKit: false,
+                    kitItems: [],
                 });
             }
             setIsLoading(false);
@@ -147,6 +156,44 @@ const ProductFormPage: React.FC<ProductFormPageProps> = ({ productId, categories
         onBack();
     };
 
+    const handleAddKitItem = () => {
+        if (!kitItemInput.productId || kitItemInput.quantity <= 0) return;
+        
+        setFormData(prev => {
+            const currentItems = prev.kitItems || [];
+            const existingIndex = currentItems.findIndex(i => i.productId === kitItemInput.productId);
+            
+            let newItems;
+            if (existingIndex >= 0) {
+                newItems = [...currentItems];
+                newItems[existingIndex].quantity += kitItemInput.quantity;
+            } else {
+                newItems = [...currentItems, { ...kitItemInput }];
+            }
+            return { ...prev, kitItems: newItems };
+        });
+        setKitItemInput({ productId: '', quantity: 1 });
+    };
+
+    const handleRemoveKitItem = (productIdToRemove: string) => {
+        setFormData(prev => ({
+            ...prev,
+            kitItems: (prev.kitItems || []).filter(i => i.productId !== productIdToRemove)
+        }));
+    };
+
+    const calculateSuggestedKitPrice = () => {
+        if (!formData.kitItems || formData.kitItems.length === 0) return 0;
+        return formData.kitItems.reduce((total, item) => {
+            const product = allProducts.find(p => p.id === item.productId);
+            return total + (product ? product.price * item.quantity : 0);
+        }, 0);
+    };
+
+    const applySuggestedPrice = () => {
+        setFormData(prev => ({ ...prev, price: calculateSuggestedKitPrice() }));
+    };
+
     if (isLoading) return <div className="text-center p-8 text-gray-500 font-bold uppercase text-xs animate-pulse">Acessando Arquivos...</div>;
     
     const inputStyle = "mt-1 block w-full rounded-2xl border border-gray-300 py-3 px-4 shadow-sm focus:border-theme-primary focus:ring-2 focus:ring-theme-primary/20 dark:border-gray-600 dark:bg-gray-700 transition-all outline-none";
@@ -156,8 +203,9 @@ const ProductFormPage: React.FC<ProductFormPageProps> = ({ productId, categories
             <div className="border-b border-gray-100 dark:border-gray-700 mb-8">
                 <nav className="-mb-px flex space-x-8 overflow-x-auto pb-2">
                     <button onClick={() => setActiveTab('main')} className={`px-4 py-3 text-xs font-black uppercase tracking-widest border-b-2 transition-all ${activeTab === 'main' ? 'border-theme-primary text-theme-primary' : 'border-transparent text-gray-400'}`}>1. Ficha Técnica</button>
-                    {!productId && <button onClick={() => setActiveTab('inventory')} className={`px-4 py-3 text-xs font-black uppercase tracking-widest border-b-2 transition-all ${activeTab === 'inventory' ? 'border-theme-primary text-theme-primary' : 'border-transparent text-gray-400'}`}>2. Lote de Entrada</button>}
-                    <button onClick={() => setActiveTab('tax')} className={`px-4 py-3 text-xs font-black uppercase tracking-widest border-b-2 transition-all ${activeTab === 'tax' ? 'border-theme-primary text-theme-primary' : 'border-transparent text-gray-400'}`}>3. Dados Fiscais</button>
+                    <button onClick={() => setActiveTab('kit')} className={`px-4 py-3 text-xs font-black uppercase tracking-widest border-b-2 transition-all ${activeTab === 'kit' ? 'border-theme-primary text-theme-primary' : 'border-transparent text-gray-400'}`}>Kit / Cesta</button>
+                    {!productId && <button onClick={() => setActiveTab('inventory')} className={`px-4 py-3 text-xs font-black uppercase tracking-widest border-b-2 transition-all ${activeTab === 'inventory' ? 'border-theme-primary text-theme-primary' : 'border-transparent text-gray-400'}`}>Lote de Entrada</button>}
+                    <button onClick={() => setActiveTab('tax')} className={`px-4 py-3 text-xs font-black uppercase tracking-widest border-b-2 transition-all ${activeTab === 'tax' ? 'border-theme-primary text-theme-primary' : 'border-transparent text-gray-400'}`}>Dados Fiscais</button>
                 </nav>
             </div>
 
@@ -240,6 +288,104 @@ const ProductFormPage: React.FC<ProductFormPageProps> = ({ productId, categories
                              {formData.image ? <img src={formData.image} className="h-48 w-48 object-contain rounded-2xl mb-4 shadow-sm"/> : <ImageIcon size={64} className="text-gray-300 mb-4"/>}
                              <p className="text-[10px] uppercase font-black text-gray-400 tracking-widest">Imagem Ilustrativa</p>
                         </div>
+                    </div>
+                )}
+
+                {activeTab === 'kit' && (
+                    <div className="space-y-6 animate-in fade-in slide-in-from-top-4 duration-300">
+                        <div className="flex items-center gap-3 p-4 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border border-gray-200 dark:border-gray-700">
+                            <input 
+                                type="checkbox" 
+                                id="isKit" 
+                                name="isKit" 
+                                checked={formData.isKit || false} 
+                                onChange={handleChange} 
+                                className="w-5 h-5 rounded border-gray-300 text-theme-primary focus:ring-theme-primary"
+                            />
+                            <label htmlFor="isKit" className="text-sm font-bold text-gray-700 dark:text-gray-300">Este produto é um Kit / Cesta (Composto por outros produtos)</label>
+                        </div>
+
+                        {formData.isKit && (
+                            <div className="space-y-4">
+                                <div className="p-4 bg-theme-primary/10 border-l-4 border-theme-primary text-theme-primary rounded-r-xl flex justify-between items-center">
+                                    <div>
+                                        <p className="text-xs font-bold uppercase tracking-tight flex items-center gap-2">
+                                            <PackagePlus size={16}/> Composição do Kit
+                                        </p>
+                                        <p className="text-[10px] font-medium mt-1">Adicione os produtos que compõem este kit. O estoque do kit será baixado com base nos itens.</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-[10px] font-black uppercase text-gray-500">Preço Sugerido (Soma)</p>
+                                        <p className="text-lg font-black text-theme-primary">{formatCurrencyDisplay(calculateSuggestedKitPrice())}</p>
+                                        <button type="button" onClick={applySuggestedPrice} className="text-[10px] font-bold text-theme-primary hover:underline">Aplicar ao Preço de Venda</button>
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-2 items-end bg-gray-50 dark:bg-gray-900/50 p-4 rounded-2xl border border-gray-200 dark:border-gray-700">
+                                    <div className="flex-1">
+                                        <label className="block text-[10px] font-black text-gray-400 uppercase ml-1 mb-1">Produto</label>
+                                        <select 
+                                            value={kitItemInput.productId} 
+                                            onChange={(e) => setKitItemInput(prev => ({ ...prev, productId: e.target.value }))}
+                                            className={inputStyle}
+                                        >
+                                            <option value="">Selecione um produto...</option>
+                                            {allProducts.filter(p => p.id !== formData.id && !p.isKit).map(p => (
+                                                <option key={p.id} value={p.id}>{p.name} - {formatCurrencyDisplay(p.price)}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div className="w-32">
+                                        <label className="block text-[10px] font-black text-gray-400 uppercase ml-1 mb-1">Qtd.</label>
+                                        <input 
+                                            type="number" 
+                                            min="1"
+                                            value={kitItemInput.quantity} 
+                                            onChange={(e) => setKitItemInput(prev => ({ ...prev, quantity: parseInt(e.target.value) || 1 }))}
+                                            className={inputStyle}
+                                        />
+                                    </div>
+                                    <Button type="button" onClick={handleAddKitItem} variant="primary" className="mb-1 h-[46px] rounded-xl px-6">
+                                        <Plus size={18} />
+                                    </Button>
+                                </div>
+
+                                {formData.kitItems && formData.kitItems.length > 0 && (
+                                    <div className="border dark:border-gray-700 rounded-2xl overflow-hidden">
+                                        <table className="w-full text-sm text-left">
+                                            <thead className="bg-gray-50 dark:bg-gray-900/50 text-xs uppercase text-gray-500 font-black">
+                                                <tr>
+                                                    <th className="px-4 py-3">Produto</th>
+                                                    <th className="px-4 py-3 text-center">Qtd.</th>
+                                                    <th className="px-4 py-3 text-right">Preço Unit.</th>
+                                                    <th className="px-4 py-3 text-right">Subtotal</th>
+                                                    <th className="px-4 py-3 text-center">Ação</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y dark:divide-gray-700">
+                                                {formData.kitItems.map((item, index) => {
+                                                    const product = allProducts.find(p => p.id === item.productId);
+                                                    const subtotal = product ? product.price * item.quantity : 0;
+                                                    return (
+                                                        <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                                                            <td className="px-4 py-3 font-medium">{product?.name || 'Produto não encontrado'}</td>
+                                                            <td className="px-4 py-3 text-center font-mono">{item.quantity}</td>
+                                                            <td className="px-4 py-3 text-right font-mono text-gray-500">{formatCurrencyDisplay(product?.price)}</td>
+                                                            <td className="px-4 py-3 text-right font-mono font-bold">{formatCurrencyDisplay(subtotal)}</td>
+                                                            <td className="px-4 py-3 text-center">
+                                                                <button type="button" onClick={() => handleRemoveKitItem(item.productId)} className="text-red-500 hover:text-red-700 p-1">
+                                                                    <Trash2 size={16} />
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                 )}
 

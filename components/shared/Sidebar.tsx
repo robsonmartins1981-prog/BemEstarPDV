@@ -1,13 +1,13 @@
 
 import React, { useState } from 'react';
-import { ShoppingCart, Settings, Megaphone, Palette, Landmark, LogOut } from 'lucide-react';
+import { ShoppingCart, Settings, Megaphone, Palette, Landmark, LogOut, Wallet } from 'lucide-react';
 import ThemeModal from './ThemeModal';
 import LogoIcon from './LogoIcon';
 import { useAuth } from '../../App';
 
 interface SidebarProps {
-  currentView: 'pos' | 'erp' | 'crm' | 'fiscal';
-  setView: (view: 'pos' | 'erp' | 'crm' | 'fiscal') => void;
+  currentView: 'pos' | 'erp' | 'crm' | 'fiscal' | 'finance';
+  setView: (view: 'pos' | 'erp' | 'crm' | 'fiscal' | 'finance') => void;
 }
 
 const navItems = [
@@ -15,6 +15,7 @@ const navItems = [
   { id: 'erp', label: 'ERP', icon: Settings },
   { id: 'crm', label: 'CRM', icon: Megaphone },
   { id: 'fiscal', label: 'Fiscal', icon: Landmark },
+  { id: 'finance', label: 'Finanças', icon: Wallet },
 ];
 
 const Sidebar: React.FC<SidebarProps> = ({ currentView, setView }) => {
@@ -26,9 +27,11 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView }) => {
     logout();
   };
 
-  const filteredItems = navItems.filter(item => 
-    user?.permissions.includes(item.id as any)
-  );
+  const filteredItems = navItems.filter(item => {
+    if (item.id === 'finance') return true;
+    const hasPermission = user?.permissions.includes(item.id as any) || user?.permissions.some(p => p.startsWith(`${item.id}:`));
+    return hasPermission;
+  });
 
   return (
     <>
@@ -46,7 +49,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView }) => {
           {filteredItems.map(item => (
             <button
               key={item.id}
-              onClick={() => setView(item.id as 'pos' | 'erp' | 'crm' | 'fiscal')}
+              onClick={() => setView(item.id as 'pos' | 'erp' | 'crm' | 'fiscal' | 'finance')}
               className={`
                 flex flex-col items-center justify-center rounded-lg transition-all duration-200 
                 p-1 md:p-2 md:w-16 md:h-16

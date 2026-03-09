@@ -13,9 +13,46 @@ const CashAudit: React.FC = () => {
     const [successMsg, setSuccessMsg] = useState('');
 
     const fetchEntries = useCallback(async () => {
-        const all = await db.getAll('historicalCash');
-        // Ordena por data decrescente
-        setEntries(all.sort((a, b) => b.date.getTime() - a.date.getTime()));
+        const allHistorical = await db.getAll('historicalCash');
+        const allSessions = await db.getAll('cashSessions');
+        
+        const closedSessions = allSessions.filter(s => s.status === 'CLOSED');
+        
+        const mappedSessions: HistoricalCashEntry[] = closedSessions.map(session => {
+            let cash = 0, pix = 0, credit = 0, debit = 0, withdrawal = 0;
+            
+            session.sales.forEach(sale => {
+                sale.payments.forEach(payment => {
+                    if (payment.method === 'Dinheiro') cash += payment.amount;
+                    else if (payment.method === 'PIX') pix += payment.amount;
+                    else if (payment.method === 'Crédito') credit += payment.amount;
+                    else if (payment.method === 'Débito') debit += payment.amount;
+                });
+            });
+            
+            session.transactions.forEach(tx => {
+                if (tx.type === 'SANGRIA') withdrawal += tx.amount;
+            });
+            
+            const gross = cash + pix + credit + debit;
+            const net = gross - withdrawal;
+            
+            return {
+                id: session.id,
+                date: session.endDate || session.startDate,
+                terminal: session.shiftName || 'CAIXA',
+                cash,
+                pix,
+                credit,
+                debit,
+                withdrawal,
+                totalGross: gross,
+                totalNet: net
+            };
+        });
+
+        const combined = [...allHistorical, ...mappedSessions];
+        setEntries(combined.sort((a, b) => b.date.getTime() - a.date.getTime()));
     }, []);
 
     useEffect(() => {

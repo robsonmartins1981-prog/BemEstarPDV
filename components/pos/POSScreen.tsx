@@ -5,6 +5,8 @@ import type { SaleItem, Sale, Product, CashTransaction, Payment, Customer, Parke
 import { db } from '../../services/databaseService';
 import { CashSessionContext } from '../../App';
 import { addToQueue } from '../../services/syncService'; 
+import { getActivePromotions, getPromotionalPrice } from '../../utils/promotionUtils';
+import type { Promotion } from '../../types';
 
 import ProductSearch from './ProductSearch';
 import Cart from './Cart';
@@ -29,6 +31,12 @@ const POSScreen: React.FC<POSScreenProps> = ({ setView }) => {
   const [activeSubView, setActiveSubView] = useState<'checkout' | 'parked' | 'today'>('checkout');
 
   const [cartItems, setCartItems] = useState<SaleItem[]>([]);
+  const [activePromotions, setActivePromotions] = useState<Promotion[]>([]);
+
+  useEffect(() => {
+    getActivePromotions().then(setActivePromotions);
+  }, [activeSubView]);
+
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [includeCpf, setIncludeCpf] = useState(false);
   const [cpf, setCpf] = useState('');
@@ -117,21 +125,23 @@ const POSScreen: React.FC<POSScreenProps> = ({ setView }) => {
   };
   
   const handleAddProduct = useCallback((product: Product, quantity: number) => {
+    const promoPrice = getPromotionalPrice(product, activePromotions);
+    
     setCartItems(prevItems => {
       const existingItem = prevItems.find(item => item.productId === product.id);
       if (existingItem) {
         return prevItems.map(item =>
-          item.productId === product.id ? { ...item, quantity: item.quantity + quantity, total: (item.quantity + quantity) * item.unitPrice - item.discount } : item
+          item.productId === product.id ? { ...item, quantity: item.quantity + quantity, total: (item.quantity + quantity) * promoPrice - item.discount } : item
         );
       } else {
         const newItem: SaleItem = {
           productId: product.id, productName: product.name, productImage: product.image,
-          unitPrice: product.price, quantity: quantity, discount: 0, total: product.price * quantity,
+          unitPrice: promoPrice, quantity: quantity, discount: 0, total: promoPrice * quantity,
         };
         return [...prevItems, newItem];
       }
     });
-  }, []);
+  }, [activePromotions]);
 
   const handleRemoveItem = useCallback((productId: string) => setCartItems(prev => prev.filter(item => item.productId !== productId)), []);
   const handleUpdateQuantity = useCallback((productId: string, newQuantity: number) => {
@@ -259,6 +269,43 @@ const POSScreen: React.FC<POSScreenProps> = ({ setView }) => {
     setActiveSubView('checkout');
   }, []);
 
+  const handleFinalizeDelivery = useCallback(async (sale: ParkedSale) => {
+    if (!session || !sale.payments || sale.payments.length === 0) return;
+    
+    const totalPayments = sale.payments.reduce((acc, p) => acc + p.amount, 0);
+    const change = Math.max(0, totalPayments - sale.total);
+
+    const tx = db.transaction(['cashSessions', 'sales', 'parkedSales'], 'readwrite');
+    const newSale: Sale = {
+      id: sale.id,
+      date: new Date(), 
+      items: sale.items, 
+      subtotal: sale.items.reduce((acc, item) => acc + item.total, 0),
+      totalDiscount: 0, 
+      totalAmount: sale.total, 
+      payments: sale.payments, 
+      change: change,
+      customerId: sale.customerId,
+      isSynced: false,
+      type: sale.type,
+      deliveryAddress: sale.deliveryAddress,
+      deliveryFee: sale.deliveryFee,
+      neighborhood: sale.neighborhood,
+      contactPhone: sale.contactPhone,
+      notes: sale.notes
+    };
+    
+    const updatedSession = { ...session, sales: [...session.sales, newSale] };
+    await tx.objectStore('cashSessions').put(updatedSession);
+    await tx.objectStore('sales').put(newSale); 
+    await tx.objectStore('parkedSales').delete(sale.id);
+    
+    await tx.done;
+    setSession(updatedSession);
+    
+    addToQueue('FISCAL_EMISSION', { saleId: newSale.id });
+  }, [session, setSession]);
+
   const handleCashOperation = useCallback(async (transaction: CashTransaction) => {
     if (!session) return;
     const updatedSession = { ...session, transactions: [...session.transactions, transaction] };
@@ -354,7 +401,7 @@ const POSScreen: React.FC<POSScreenProps> = ({ setView }) => {
   const renderActiveView = () => {
     switch(activeSubView) {
       case 'parked':
-        return <ParkedSalesScreen onBack={() => setActiveSubView('checkout')} onLoadSale={handleLoadParkedSale} />;
+        return <ParkedSalesScreen onBack={() => setActiveSubView('checkout')} onLoadSale={handleLoadParkedSale} onFinalizeDelivery={handleFinalizeDelivery} />;
       case 'today':
         return <TodaySalesScreen onBack={() => setActiveSubView('checkout')} />;
       case 'checkout':
@@ -362,7 +409,7 @@ const POSScreen: React.FC<POSScreenProps> = ({ setView }) => {
         return (
           <main className="flex-grow flex flex-col lg:grid lg:grid-cols-5 gap-4 p-4 overflow-y-auto lg:overflow-hidden">
             <div className="lg:col-span-3 flex flex-col gap-4 lg:overflow-hidden h-auto lg:h-full shrink-0">
-              <ProductSearch onAddProduct={handleAddProduct} />
+              <ProductSearch onAddProduct={handleAddProduct} activePromotions={activePromotions} />
               <div className="flex-grow bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden flex flex-col min-h-[300px]">
                 <div className="flex-grow overflow-y-auto max-h-[50vh] lg:max-h-full">
                    <Cart items={cartItems} onRemove={handleRemoveItem} onUpdateQuantity={handleUpdateQuantity} onUpdateDiscount={handleUpdateDiscount} customerName={selectedCustomer?.name} />

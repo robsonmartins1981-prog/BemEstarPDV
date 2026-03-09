@@ -202,8 +202,18 @@ const ERPScreen: React.FC<ERPScreenProps> = ({ setView }) => {
 
                 <nav className="flex-grow p-3 space-y-1">
                     {menuModules.filter(m => !m.adminOnly || currentUser?.role === 'ADMIN').map(module => {
+                        const hasAnyErpSubPermission = currentUser?.permissions?.some(p => p.startsWith('erp:'));
+                        const visibleItems = module.items.filter(item => {
+                            if (currentUser?.role === 'ADMIN') return true;
+                            if (currentUser?.permissions?.includes(`erp:${item.id}`)) return true;
+                            if (currentUser?.permissions?.includes('erp') && !hasAnyErpSubPermission) return true;
+                            return false;
+                        });
+
+                        if (visibleItems.length === 0) return null;
+
                         const isExpanded = expandedSections.has(module.id);
-                        const hasActiveChild = module.items.some(i => i.id === activeModule);
+                        const hasActiveChild = visibleItems.some(i => i.id === activeModule);
                         
                         return (
                             <div key={module.id} className="flex flex-col mb-2">
@@ -220,7 +230,7 @@ const ERPScreen: React.FC<ERPScreenProps> = ({ setView }) => {
 
                                 <div className={`flex flex-col gap-1 mt-1 relative ml-4 ${!isExpanded ? 'hidden' : ''}`}>
                                     <div className="absolute left-0 top-0 bottom-0 w-px bg-gray-100 dark:bg-gray-700 ml-1.5"></div>
-                                    {module.items.map(item => {
+                                    {visibleItems.map(item => {
                                         const isActive = activeModule === item.id;
                                         return (
                                             <a 

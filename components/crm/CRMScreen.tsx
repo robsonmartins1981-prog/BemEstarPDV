@@ -1,8 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
 import Button from '../shared/Button';
-import { Target, Send, Bot, Ticket, ArrowLeft, Users } from 'lucide-react';
+import { Target, Send, Bot, Ticket, ArrowLeft, Users, Tag } from 'lucide-react';
 import { db } from '../../services/databaseService';
+import { useAuth } from '../../App';
 import type { Segment } from '../../types';
 
 // Importa os componentes de listagem
@@ -10,14 +11,16 @@ import Segmentation from './Segmentation';
 import Campaigns from './Campaigns';
 import CouponsScreen from './CouponsScreen';
 import CustomerManagement from '../erp/CustomerManagement'; // Reutilizando a gestão de clientes
+import PromotionsScreen from './PromotionsScreen';
 
 // Importa os novos componentes de formulário (página inteira)
 import SegmentFormPage from './SegmentFormPage';
 import CampaignFormPage from './CampaignFormPage';
 import CouponFormPage from './CouponFormPage';
 import CustomerFormPage from '../erp/CustomerFormPage';
+import PromotionFormPage from './PromotionFormPage';
 
-type ActiveCrmModule = 'customers' | 'segmentation' | 'campaigns' | 'automation' | 'coupons';
+type ActiveCrmModule = 'customers' | 'segmentation' | 'campaigns' | 'automation' | 'coupons' | 'promotions';
 
 // Novo tipo para controlar a visualização DENTRO do módulo CRM.
 type CrmView = 
@@ -25,13 +28,15 @@ type CrmView =
   | { type: 'segment_form', segmentId?: string }
   | { type: 'campaign_form', campaignId?: string }
   | { type: 'coupon_form', couponId?: string }
-  | { type: 'customer_form', customerId?: string };
+  | { type: 'customer_form', customerId?: string }
+  | { type: 'promotion_form', promotionId?: string };
 
 interface CRMScreenProps {
     setView: (view: 'pos' | 'erp' | 'crm' | 'fiscal') => void;
 }
 
 const CRMScreen: React.FC<CRMScreenProps> = ({ setView }) => {
+    const { user: currentUser } = useAuth();
     const [crmView, setCrmView] = useState<CrmView>({ type: 'module', id: 'customers' });
     const [segments, setSegments] = useState<Segment[]>([]);
 
@@ -45,6 +50,7 @@ const CRMScreen: React.FC<CRMScreenProps> = ({ setView }) => {
         { id: 'campaigns', label: 'Campanhas', icon: Send },
         { id: 'automation', label: 'Automação', icon: Bot },
         { id: 'coupons', label: 'Cupons', icon: Ticket },
+        { id: 'promotions', label: 'Promoções', icon: Tag },
     ];
     
     const renderActiveView = () => {
@@ -57,6 +63,8 @@ const CRMScreen: React.FC<CRMScreenProps> = ({ setView }) => {
                 return <CampaignFormPage campaignId={crmView.campaignId} segments={segments} onBack={() => setCrmView({ type: 'module', id: 'campaigns' })} />;
             case 'coupon_form':
                 return <CouponFormPage couponId={crmView.couponId} onBack={() => setCrmView({ type: 'module', id: 'coupons' })} />;
+            case 'promotion_form':
+                return <PromotionFormPage promotionId={crmView.promotionId} onBack={() => setCrmView({ type: 'module', id: 'promotions' })} />;
             
             case 'module':
             default:
@@ -69,6 +77,8 @@ const CRMScreen: React.FC<CRMScreenProps> = ({ setView }) => {
                         return <Campaigns onNewCampaign={() => setCrmView({ type: 'campaign_form' })} onEditCampaign={(id) => setCrmView({ type: 'campaign_form', campaignId: id })} />;
                     case 'coupons':
                          return <CouponsScreen onNewCoupon={() => setCrmView({ type: 'coupon_form' })} onEditCoupon={(id) => setCrmView({ type: 'coupon_form', couponId: id })} />;
+                    case 'promotions':
+                         return <PromotionsScreen onNewPromotion={() => setCrmView({ type: 'promotion_form' })} onEditPromotion={(id) => setCrmView({ type: 'promotion_form', promotionId: id })} />;
                     default:
                         return <div className="p-8 text-center text-gray-500"><h2 className="text-2xl font-semibold">Módulo em construção</h2><p>Esta funcionalidade ainda não foi implementada.</p></div>;
                 }
@@ -81,6 +91,7 @@ const CRMScreen: React.FC<CRMScreenProps> = ({ setView }) => {
             case 'segment_form': return { title: crmView.segmentId ? 'Editar Segmento' : 'Novo Segmento', activeModule: 'segmentation' as ActiveCrmModule, backView: { type: 'module', id: 'segmentation' } as CrmView };
             case 'campaign_form': return { title: crmView.campaignId ? 'Editar Campanha' : 'Nova Campanha', activeModule: 'campaigns' as ActiveCrmModule, backView: { type: 'module', id: 'campaigns' } as CrmView };
             case 'coupon_form': return { title: crmView.couponId ? 'Editar Cupom' : 'Novo Cupom', activeModule: 'coupons' as ActiveCrmModule, backView: { type: 'module', id: 'coupons' } as CrmView };
+            case 'promotion_form': return { title: crmView.promotionId ? 'Editar Promoção' : 'Nova Promoção', activeModule: 'promotions' as ActiveCrmModule, backView: { type: 'module', id: 'promotions' } as CrmView };
             case 'module':
             default:
                 return { title: menuItems.find(item => item.id === crmView.id)?.label || 'CRM', activeModule: crmView.id, backView: null };
@@ -98,7 +109,13 @@ const CRMScreen: React.FC<CRMScreenProps> = ({ setView }) => {
                 </div>
                 <nav className="flex-grow md:p-2 overflow-x-auto whitespace-nowrap md:whitespace-normal">
                     <ul className="flex md:flex-col p-2 md:p-0 gap-2 md:gap-1">
-                        {menuItems.map(item => (
+                        {menuItems.filter(item => {
+                            if (currentUser?.role === 'ADMIN') return true;
+                            const hasAnyCrmSubPermission = currentUser?.permissions?.some(p => p.startsWith('crm:'));
+                            if (currentUser?.permissions?.includes(`crm:${item.id}`)) return true;
+                            if (currentUser?.permissions?.includes('crm') && !hasAnyCrmSubPermission) return true;
+                            return false;
+                        }).map(item => (
                             <li key={item.id} className="inline-block md:block">
                                 <a href="#" onClick={(e) => { e.preventDefault(); setCrmView({ type: 'module', id: item.id as ActiveCrmModule }); }} 
                                     className={`flex items-center gap-2 px-3 py-2 md:px-4 rounded-md text-sm font-medium transition-colors border md:border-0 ${activeModule === item.id ? 'bg-theme-primary text-white md:bg-theme-primary/10 md:text-theme-primary border-theme-primary' : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-600'}`}>

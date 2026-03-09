@@ -15,11 +15,32 @@ const UserFormPage: React.FC<UserFormPageProps> = ({ userId, onBack }) => {
     const [formData, setFormData] = useState<Partial<User>>({});
     const [isLoading, setIsLoading] = useState(true);
 
-    const modules: { id: 'pos' | 'erp' | 'crm' | 'fiscal', label: string }[] = [
-        { id: 'pos', label: 'PDV (Caixa e Vendas)' },
-        { id: 'erp', label: 'ERP (Estoque e Financeiro)' },
-        { id: 'crm', label: 'CRM (Marketing e Clientes)' },
-        { id: 'fiscal', label: 'Fiscal (Configurações NFC-e)' },
+    const modules = [
+        { id: 'pos', label: 'PDV (Caixa e Vendas)', subModules: [] },
+        { id: 'erp', label: 'ERP (Estoque e Financeiro)', subModules: [
+            { id: 'erp:dre', label: 'Painel DRE / Lucro' },
+            { id: 'erp:cashAudit', label: 'Controle de Caixa' },
+            { id: 'erp:hr', label: 'Equipe e RH' },
+            { id: 'erp:products', label: 'Produtos' },
+            { id: 'erp:categories', label: 'Categorias' },
+            { id: 'erp:inventory', label: 'Inventário e Validade' },
+            { id: 'erp:generateOrder', label: 'Sugestão de Pedidos' },
+            { id: 'erp:nfeImport', label: 'Importar NF-e XML' },
+            { id: 'erp:customers', label: 'Base de Clientes' },
+            { id: 'erp:personalFinance', label: 'Finanças Pessoais' },
+            { id: 'erp:expenses', label: 'Contas a Pagar' },
+            { id: 'erp:suppliers', label: 'Fornecedores (Credores)' },
+            { id: 'erp:deliveryZones', label: 'Bairros e Fretes' },
+            { id: 'erp:generalSettings', label: 'Geral e WhatsApp' },
+        ] },
+        { id: 'crm', label: 'CRM (Marketing e Clientes)', subModules: [
+            { id: 'crm:customers', label: 'Base de Clientes' },
+            { id: 'crm:segmentation', label: 'Segmentação' },
+            { id: 'crm:campaigns', label: 'Campanhas' },
+            { id: 'crm:automation', label: 'Automação' },
+            { id: 'crm:coupons', label: 'Cupons' },
+        ] },
+        { id: 'fiscal', label: 'Fiscal (Configurações NFC-e)', subModules: [] },
     ];
 
     useEffect(() => {
@@ -53,11 +74,40 @@ const UserFormPage: React.FC<UserFormPageProps> = ({ userId, onBack }) => {
         }
     };
 
-    const togglePermission = (moduleId: any) => {
+    const togglePermission = (moduleId: string) => {
         const current = formData.permissions || [];
-        const next = current.includes(moduleId)
-            ? current.filter(p => p !== moduleId)
-            : [...current, moduleId];
+        let next = [...current];
+        
+        if (current.includes(moduleId)) {
+            // Uncheck
+            next = next.filter(p => p !== moduleId);
+            // If it's a main module, also remove its sub-modules
+            if (!moduleId.includes(':')) {
+                next = next.filter(p => !p.startsWith(`${moduleId}:`));
+            }
+        } else {
+            // Check
+            next.push(moduleId);
+            // If it's a main module, auto-check all its sub-modules
+            if (!moduleId.includes(':')) {
+                const moduleDef = modules.find(m => m.id === moduleId);
+                if (moduleDef && moduleDef.subModules) {
+                    moduleDef.subModules.forEach(sub => {
+                        if (!next.includes(sub.id)) {
+                            next.push(sub.id);
+                        }
+                    });
+                }
+            }
+            // If it's a sub-module, ensure the main module is checked
+            if (moduleId.includes(':')) {
+                const mainModule = moduleId.split(':')[0];
+                if (!next.includes(mainModule)) {
+                    next.push(mainModule);
+                }
+            }
+        }
+        
         setFormData(prev => ({ ...prev, permissions: next }));
     };
 
@@ -159,18 +209,41 @@ const UserFormPage: React.FC<UserFormPageProps> = ({ userId, onBack }) => {
                         {modules.map(mod => {
                             const isSelected = formData.permissions?.includes(mod.id);
                             return (
-                                <button
-                                    key={mod.id}
-                                    type="button"
-                                    onClick={() => togglePermission(mod.id)}
-                                    className={`flex items-center justify-between p-4 rounded-2xl border-2 transition-all text-left ${isSelected ? 'border-theme-primary bg-theme-primary/5 text-theme-primary shadow-sm' : 'border-gray-100 text-gray-400'}`}
-                                >
-                                    <div className="flex flex-col">
-                                        <span className="text-[10px] font-black uppercase tracking-widest opacity-60">Permissão para</span>
-                                        <span className="font-bold text-sm">{mod.label}</span>
-                                    </div>
-                                    {isSelected ? <CheckSquare size={24} /> : <Square size={24} />}
-                                </button>
+                                <div key={mod.id} className={`flex flex-col rounded-2xl border-2 transition-all ${isSelected ? 'border-theme-primary bg-theme-primary/5 shadow-sm' : 'border-gray-100'}`}>
+                                    <button
+                                        type="button"
+                                        onClick={() => togglePermission(mod.id)}
+                                        className={`flex items-center justify-between p-4 text-left w-full ${isSelected ? 'text-theme-primary' : 'text-gray-400'}`}
+                                    >
+                                        <div className="flex flex-col">
+                                            <span className="text-[10px] font-black uppercase tracking-widest opacity-60">Permissão para</span>
+                                            <span className="font-bold text-sm">{mod.label}</span>
+                                        </div>
+                                        {isSelected ? <CheckSquare size={24} /> : <Square size={24} />}
+                                    </button>
+                                    
+                                    {isSelected && mod.subModules.length > 0 && (
+                                        <div className="px-4 pb-4 pt-2 border-t border-theme-primary/20 flex flex-col gap-2">
+                                            <span className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-1">Sub-módulos</span>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                {mod.subModules.map(sub => {
+                                                    const isSubSelected = formData.permissions?.includes(sub.id);
+                                                    return (
+                                                        <button
+                                                            key={sub.id}
+                                                            type="button"
+                                                            onClick={() => togglePermission(sub.id)}
+                                                            className={`flex items-center gap-2 p-2 rounded-lg text-xs font-bold transition-all text-left ${isSubSelected ? 'bg-theme-primary text-white' : 'bg-white dark:bg-gray-800 text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
+                                                        >
+                                                            {isSubSelected ? <CheckSquare size={14} /> : <Square size={14} />}
+                                                            <span className="truncate">{sub.label}</span>
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
                             );
                         })}
                     </div>

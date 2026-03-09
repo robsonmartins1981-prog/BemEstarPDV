@@ -83,10 +83,10 @@ const CouponFormPage: React.FC<CouponFormPageProps> = ({ couponId, onBack }) => 
                         <input type="text" name="code" value={formData.code?.toUpperCase()} onChange={handleChange} required className={inputStyle} />
                     </div>
                     <div>
-                        <label className="block text-sm font-medium">Tipo de Desconto</label>
-                        <select name="type" value={formData.type} onChange={handleChange} className={inputStyle}>
-                            <option value="PERCENTAGE">Percentual (%)</option>
-                            <option value="FIXED_AMOUNT">Valor Fixo (R$)</option>
+                        <label className="block text-sm font-medium mb-1">Tipo de Desconto</label>
+                        <select name="type" value={formData.type} onChange={handleChange} className={inputStyle + " font-bold"}>
+                            <option value="PERCENTAGE">%</option>
+                            <option value="FIXED_AMOUNT">$</option>
                         </select>
                     </div>
                     <div>

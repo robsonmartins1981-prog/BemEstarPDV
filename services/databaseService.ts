@@ -1,7 +1,7 @@
 
 // services/databaseService.ts
 import { openDB, type IDBPDatabase, type DBSchema } from 'idb';
-import type { Product, Sale, CashSession, Supplier, Customer, Expense, Segment, Campaign, AutomationRule, InventoryLot, InventoryAdjustment, ParkedSale, Category, Coupon, FiscalConfig, SyncJob, Employee, AuditLog, FinancialEntry, HistoricalCashEntry, DeliveryZone, StoreSettings, User } from '../types';
+import type { Product, Sale, CashSession, Supplier, Customer, Expense, Segment, Campaign, AutomationRule, InventoryLot, InventoryAdjustment, ParkedSale, Category, Coupon, FiscalConfig, SyncJob, Employee, AuditLog, FinancialEntry, HistoricalCashEntry, DeliveryZone, StoreSettings, User, Promotion } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 
 interface AppDB extends DBSchema {
@@ -19,6 +19,7 @@ interface AppDB extends DBSchema {
   campaigns: { key: string; value: Campaign; indexes: { name: string; status: string }; };
   automationRules: { key: string; value: AutomationRule; indexes: { trigger: string; isActive: number }; };
   coupons: { key: string; value: Coupon; indexes: { code: string }; };
+  promotions: { key: string; value: Promotion; indexes: { active: number }; };
   fiscalConfig: { key: string; value: FiscalConfig; };
   syncQueue: { key: string; value: SyncJob; indexes: { status: string, type: string }; };
   employees: { key: string; value: Employee; indexes: { status: string }; };
@@ -35,30 +36,68 @@ let db: IDBPDatabase<AppDB>;
 export async function initDB() {
   if (db) return; 
 
-  db = await openDB<AppDB>('BemEstarPDV', 20, {
+  db = await openDB<AppDB>('BemEstarPDV', 24, {
     upgrade(database, oldVersion, newVersion, transaction) {
-      if (oldVersion < 1) {
+      if (!database.objectStoreNames.contains('products')) {
         database.createObjectStore('products', { keyPath: 'id' }).createIndex('name', 'name');
+      }
+      if (!database.objectStoreNames.contains('sales')) {
         database.createObjectStore('sales', { keyPath: 'id' }).createIndex('date', 'date');
+      }
+      if (!database.objectStoreNames.contains('cashSessions')) {
         database.createObjectStore('cashSessions', { keyPath: 'id' }).createIndex('startDate', 'startDate');
+      }
+      if (!database.objectStoreNames.contains('suppliers')) {
         database.createObjectStore('suppliers', { keyPath: 'id' }).createIndex('cnpj', 'cnpj');
+      }
+      if (!database.objectStoreNames.contains('customers')) {
         database.createObjectStore('customers', { keyPath: 'id' }).createIndex('cpf', 'cpf');
+      }
+      if (!database.objectStoreNames.contains('expenses')) {
         database.createObjectStore('expenses', { keyPath: 'id' }).createIndex('dueDate', 'dueDate');
+      }
+      if (!database.objectStoreNames.contains('segments')) {
         database.createObjectStore('segments', { keyPath: 'id' }).createIndex('name', 'name');
+      }
+      if (!database.objectStoreNames.contains('campaigns')) {
         database.createObjectStore('campaigns', { keyPath: 'id' }).createIndex('name', 'name');
+      }
+      if (!database.objectStoreNames.contains('automationRules')) {
         database.createObjectStore('automationRules', { keyPath: 'id' });
+      }
+      if (!database.objectStoreNames.contains('inventoryLots')) {
         database.createObjectStore('inventoryLots', { keyPath: 'id' }).createIndex('productId', 'productId');
+      }
+      if (!database.objectStoreNames.contains('inventoryAdjustments')) {
         database.createObjectStore('inventoryAdjustments', { keyPath: 'id' }).createIndex('productId', 'productId');
+      }
+      if (!database.objectStoreNames.contains('parkedSales')) {
         database.createObjectStore('parkedSales', { keyPath: 'id' }).createIndex('createdAt', 'createdAt');
+      }
+      if (!database.objectStoreNames.contains('categories')) {
         database.createObjectStore('categories', { keyPath: 'id' }).createIndex('name', 'name');
+      }
+      if (!database.objectStoreNames.contains('coupons')) {
         database.createObjectStore('coupons', { keyPath: 'id' }).createIndex('code', 'code');
+      }
+      if (!database.objectStoreNames.contains('fiscalConfig')) {
         database.createObjectStore('fiscalConfig', { keyPath: 'id' });
+      }
+      if (!database.objectStoreNames.contains('syncQueue')) {
         database.createObjectStore('syncQueue', { keyPath: 'id' }).createIndex('status', 'status');
+      }
+      if (!database.objectStoreNames.contains('employees')) {
         database.createObjectStore('employees', { keyPath: 'id' }).createIndex('status', 'status');
+      }
+      if (!database.objectStoreNames.contains('historicalCash')) {
         const cashStore = database.createObjectStore('historicalCash', { keyPath: 'id' });
         cashStore.createIndex('date', 'date');
         cashStore.createIndex('terminal', 'terminal');
+      }
+      if (!database.objectStoreNames.contains('auditLogs')) {
         database.createObjectStore('auditLogs', { keyPath: 'id' }).createIndex('timestamp', 'timestamp');
+      }
+      if (!database.objectStoreNames.contains('financialEntries')) {
         database.createObjectStore('financialEntries', { keyPath: 'id' }).createIndex('date', 'date');
       }
 
@@ -70,6 +109,9 @@ export async function initDB() {
       }
       if (!database.objectStoreNames.contains('users')) {
         database.createObjectStore('users', { keyPath: 'id' }).createIndex('username', 'username');
+      }
+      if (!database.objectStoreNames.contains('promotions')) {
+        database.createObjectStore('promotions', { keyPath: 'id' }).createIndex('active', 'active');
       }
     },
   });
@@ -101,7 +143,7 @@ export async function exportFullBackup() {
         'products', 'categories', 'sales', 'customers', 'suppliers', 
         'expenses', 'employees', 'historicalCash', 'deliveryZones', 
         'inventoryLots', 'inventoryAdjustments', 'storeSettings', 
-        'coupons', 'segments', 'campaigns'
+        'coupons', 'segments', 'campaigns', 'promotions'
     ];
     
     const backupData: any = {};

@@ -7,6 +7,7 @@ import CloseCashScreen from './components/cash/CloseCashScreen';
 import ERPScreen from './components/erp/ERPScreen';
 import CRMScreen from './components/crm/CRMScreen';
 import FiscalScreen from './components/fiscal/FiscalScreen'; 
+import Dashboard from './src/components/Dashboard';
 import Sidebar from './components/shared/Sidebar';
 import LoginScreen from './components/auth/LoginScreen';
 import { startSyncService } from './services/syncService'; 
@@ -63,7 +64,8 @@ function AppContent() {
   const [session, setSession] = useState<CashSession | null>(null);
   const [showCloseScreen, setShowCloseScreen] = useState<boolean>(false);
   const [dbReady, setDbReady] = useState<boolean>(false);
-  const [view, setView] = useState<'pos' | 'erp' | 'crm' | 'fiscal'>('pos');
+  const [dbError, setDbError] = useState<string | null>(null);
+  const [view, setView] = useState<'pos' | 'erp' | 'crm' | 'fiscal' | 'finance'>('finance');
 
   useEffect(() => {
     const initializeApp = async () => {
@@ -73,8 +75,9 @@ function AppContent() {
         const activeSession = await db.get('cashSessions', 'active');
         if (activeSession) setSession(activeSession);
         setDbReady(true); 
-      } catch (error) {
+      } catch (error: any) {
         console.error("Erro ao inicializar:", error);
+        setDbError(error.message || "Erro desconhecido ao inicializar o banco de dados.");
       }
     };
     initializeApp();
@@ -92,20 +95,27 @@ function AppContent() {
 
   const handleCloseSession = useCallback(async () => {
     if (!session) return; 
-    const closedSession: CashSession = { ...session, endDate: new Date(), status: 'CLOSED' };
+    const closedSession: CashSession = { ...session, id: `closed-${session.startDate.getTime()}`, endDate: new Date(), status: 'CLOSED' };
     await db.delete('cashSessions', 'active');
-    await db.put('cashSessions', closedSession, `closed-${closedSession.startDate.getTime()}`);
+    await db.put('cashSessions', closedSession);
     setSession(null);
     setShowCloseScreen(false);
   }, [session]);
   
+  if (dbError) return <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white p-4"><p className="text-xl font-black text-red-500 uppercase mb-4">Erro ao Iniciar</p><p className="text-center bg-gray-800 p-4 rounded-lg font-mono text-sm max-w-2xl overflow-auto">{dbError}</p><button onClick={() => window.location.reload()} className="mt-6 px-6 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg font-bold">Tentar Novamente</button></div>;
   if (!dbReady) return <div className="flex items-center justify-center min-h-screen bg-gray-900 text-white"><p className="text-xl animate-pulse font-black uppercase">Iniciando Bem Estar...</p></div>;
   if (!user) return <LoginScreen />;
   
   const renderContent = () => {
-    if (!user.permissions.includes(view)) {
-        if (user.permissions.length > 0) {
-            setView(user.permissions[0]);
+    const hasPermission = (module: string) => {
+        if (module === 'finance') return true;
+        return user.permissions.includes(module) || user.permissions.some(p => p.startsWith(`${module}:`));
+    };
+
+    if (!hasPermission(view)) {
+        const availableModules = ['pos', 'erp', 'crm', 'fiscal', 'finance'].filter(hasPermission);
+        if (availableModules.length > 0) {
+            setView(availableModules[0] as any);
             return null;
         }
         return <div className="p-20 text-center font-black text-red-500 uppercase">Usuário sem permissões de acesso.</div>;
@@ -114,6 +124,7 @@ function AppContent() {
       case 'erp': return <ERPScreen setView={setView} />;
       case 'crm': return <CRMScreen setView={setView} />;
       case 'fiscal': return <FiscalScreen setView={setView} />;
+      case 'finance': return <Dashboard />;
       case 'pos':
       default: return <POSScreen setView={setView} />;
     }

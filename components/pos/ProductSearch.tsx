@@ -1,14 +1,16 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import type { Product } from '../../types';
+import type { Product, Promotion } from '../../types';
 import { db } from '../../services/databaseService';
-import { Search, Weight, Package, Hash, Barcode } from 'lucide-react';
+import { Search, Weight, Package, Hash, Barcode, Tag } from 'lucide-react';
+import { getPromotionalPrice } from '../../utils/promotionUtils';
 
 interface ProductSearchProps {
   onAddProduct: (product: Product, quantity: number) => void;
+  activePromotions: Promotion[];
 }
 
-const ProductSearch: React.FC<ProductSearchProps> = ({ onAddProduct }) => {
+const ProductSearch: React.FC<ProductSearchProps> = ({ onAddProduct, activePromotions }) => {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Product[]>([]);
   const [bulkProduct, setBulkProduct] = useState<Product | null>(null);
@@ -165,7 +167,10 @@ const ProductSearch: React.FC<ProductSearchProps> = ({ onAddProduct }) => {
              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Sugestões Encontradas</span>
           </div>
           <ul className="max-h-80 overflow-y-auto">
-            {results.map((product, index) => (
+            {results.map((product, index) => {
+              const promoPrice = getPromotionalPrice(product, activePromotions);
+              const hasPromo = promoPrice < product.price;
+              return (
               <li
                 key={product.id}
                 onClick={() => selectProduct(product)}
@@ -183,7 +188,10 @@ const ProductSearch: React.FC<ProductSearchProps> = ({ onAddProduct }) => {
                     </div>
                   )}
                   <div>
-                    <p className="font-bold text-gray-800 dark:text-gray-100">{product.name}</p>
+                    <p className="font-bold text-gray-800 dark:text-gray-100 flex items-center gap-2">
+                      {product.name}
+                      {hasPromo && <Tag size={14} className="text-green-500" />}
+                    </p>
                     <div className="flex items-center gap-3 text-[10px] text-gray-500 uppercase font-black">
                        <span className="flex items-center gap-0.5"><Hash size={10} className="text-theme-primary"/> {product.id}</span>
                        {product.barcode && <span className="flex items-center gap-0.5"><Barcode size={10} className="text-theme-secondary"/> {product.barcode}</span>}
@@ -191,13 +199,18 @@ const ProductSearch: React.FC<ProductSearchProps> = ({ onAddProduct }) => {
                     </div>
                   </div>
                 </div>
-                <div className="text-right">
-                  <span className="font-black text-theme-primary text-lg">
-                    {product.price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                <div className="text-right flex flex-col items-end">
+                  {hasPromo && (
+                    <span className="text-xs text-gray-400 line-through">
+                      {product.price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    </span>
+                  )}
+                  <span className={`font-black text-lg ${hasPromo ? 'text-green-600 dark:text-green-400' : 'text-theme-primary'}`}>
+                    {promoPrice.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                   </span>
                 </div>
               </li>
-            ))}
+            )})}
           </ul>
         </div>
       )}

@@ -102,7 +102,7 @@ const LoginScreen: React.FC = () => {
 
                 <div className="p-6 bg-gray-50 dark:bg-gray-900/50 text-center border-t dark:border-gray-700">
                     <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">
-                        Bem Estar Gestão & PDV v2.5.0 PRO
+                        Bem Estar Gestão & PDV alfa
                     </p>
                 </div>
             </div>

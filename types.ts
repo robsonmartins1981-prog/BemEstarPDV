@@ -20,7 +20,7 @@ export interface User {
     username: string;
     password?: string;
     role: UserRole;
-    permissions: ('pos' | 'erp' | 'crm' | 'fiscal')[];
+    permissions: string[];
     active: boolean;
 }
 
@@ -42,6 +42,8 @@ export interface Product {
   image?: string; 
   categoryId?: string; 
   supplierId?: string; 
+  isKit?: boolean;
+  kitItems?: { productId: string; quantity: number }[];
 }
 
 export interface SaleItem {
@@ -76,7 +78,13 @@ export interface Sale {
   isSynced: boolean; 
   couponCodeApplied?: string; 
   manualDiscountType?: 'PERCENTAGE' | 'FIXED_AMOUNT'; 
-  manualDiscountValue?: number; 
+  manualDiscountValue?: number;
+  type?: OrderType;
+  deliveryAddress?: string;
+  deliveryFee?: number;
+  neighborhood?: string;
+  contactPhone?: string;
+  notes?: string;
 }
 
 export interface Employee {
@@ -155,6 +163,7 @@ export interface ParkedSale {
   notes?: string;
   deliveryFee?: number;
   neighborhood?: string;
+  payments?: Payment[];
 }
 
 export interface CashTransaction { type: 'SUPRIMENTO' | 'SANGRIA' | 'REFORCO'; amount: number; date: Date; description: string; }
@@ -178,6 +187,17 @@ export interface Customer {
 export interface Expense { id: string; description: string; amount: number; supplierId?: string; categoryId: string; dueDate: Date; paidDate?: Date; status: 'PENDING' | 'PAID'; }
 export interface InventoryLot { id: string; productId: string; supplierId?: string; quantity: number; expirationDate?: Date; entryDate: Date; costPrice: number; }
 export interface InventoryAdjustment { id: string; productId: string; lotId: string; quantityChange: number; reason: string; date: Date; }
+export interface Promotion {
+  id: string;
+  name: string;
+  startDate: Date;
+  endDate: Date;
+  discountType: 'PERCENTAGE' | 'FIXED';
+  discountValue: number;
+  productIds: string[];
+  active: boolean;
+}
+
 export interface Coupon { id: string; code: string; type: 'PERCENTAGE' | 'FIXED_AMOUNT'; value: number; expiryDate: Date; maxUses: number; currentUses: number; isActive: number; }
 export type SegmentRuleType = 'INACTIVE_CUSTOMERS' | 'BIRTHDAY_MONTH' | 'VIP_CUSTOMERS' | 'PRODUCT_BUYERS';
 export interface SegmentRule { type: SegmentRuleType; value: any; }
