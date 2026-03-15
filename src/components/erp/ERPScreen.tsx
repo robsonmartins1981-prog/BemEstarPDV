@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { ShoppingCart, Users, BarChart, FileText, Boxes, ChevronDown, ChevronUp, ArrowLeft, BrainCircuit, Landmark, Wallet, FileCode, MapPin, Settings2, Truck, Circle, ShieldCheck, UserPlus } from 'lucide-react';
 import { db } from '../../services/databaseService';
-import { useAuth } from '../../App';
+import { useAuth } from '../../contexts/AuthContext';
 import type { Category } from '../../types';
 import Button from '../shared/Button';
 
@@ -22,6 +22,8 @@ import DeliveryZones from './DeliveryZones';
 import GeneralSettings from './GeneralSettings';
 import SupplierManagement from './SupplierManagement';
 import SupplierFormPage from './SupplierFormPage';
+import AccountsPayableManagement from './AccountsPayableManagement';
+import AccountPayableFormPage from './AccountPayableFormPage';
 import UserManagement from './UserManagement';
 import UserFormPage from './UserFormPage';
 
@@ -29,7 +31,7 @@ interface ERPScreenProps {
     setView: (view: 'pos' | 'erp' | 'crm' | 'fiscal' | 'stock') => void;
 }
 
-type ActiveModule = 'products' | 'categories' | 'customers' | 'suppliers' | 'reports' | 'nfeImport' | 'inventory' | 'generateOrder' | 'hr' | 'cashManagement' | 'deliveryZones' | 'generalSettings' | 'users';
+type ActiveModule = 'products' | 'categories' | 'customers' | 'suppliers' | 'reports' | 'nfeImport' | 'inventory' | 'generateOrder' | 'hr' | 'cashManagement' | 'deliveryZones' | 'generalSettings' | 'users' | 'accountsPayable';
 
 type ERPView = 
   | { type: 'module', id: ActiveModule }
@@ -38,7 +40,8 @@ type ERPView =
   | { type: 'category_form', categoryId?: string }
   | { type: 'supplier_form', supplierId?: string }
   | { type: 'employee_form', employeeId?: string }
-  | { type: 'user_form', userId?: string };
+  | { type: 'user_form', userId?: string }
+  | { type: 'account_payable_form', accountId?: string };
 
 
 interface MenuItem { id: ActiveModule; label: string; }
@@ -75,6 +78,7 @@ const menuModules: MenuModule[] = [
             { id: 'products', label: 'Produtos' },
             { id: 'categories', label: 'Categorias' },
             { id: 'inventory', label: 'Inventário e Validade' },
+            { id: 'accountsPayable', label: 'Contas a Pagar' },
         ],
     },
     {
@@ -92,7 +96,10 @@ const menuModules: MenuModule[] = [
         label: 'Clientes',
         icon: Users,
         color: 'text-teal-500',
-        items: [ { id: 'customers', label: 'Base de Clientes' } ],
+        items: [ 
+            { id: 'customers', label: 'Base de Clientes' },
+            { id: 'suppliers', label: 'Fornecedores' }
+        ],
     },
     {
         id: 'configuracoes',
@@ -132,6 +139,7 @@ const ERPScreen: React.FC<ERPScreenProps> = ({ setView }) => {
             case 'supplier_form': return <SupplierFormPage supplierId={currentErpView.supplierId} onBack={() => setCurrentErpView({ type: 'module', id: 'suppliers' })} />;
             case 'employee_form': return <EmployeeFormPage employeeId={currentErpView.employeeId} onBack={() => setCurrentErpView({ type: 'module', id: 'hr' })} />;
             case 'user_form': return <UserFormPage userId={currentErpView.userId} onBack={() => setCurrentErpView({ type: 'module', id: 'users' })} />;
+            case 'account_payable_form': return <AccountPayableFormPage accountId={currentErpView.accountId} onBack={() => setCurrentErpView({ type: 'module', id: 'accountsPayable' })} />;
             case 'module':
                 switch(currentErpView.id) {
                     case 'hr': return <HRManagement onNewEmployee={() => setCurrentErpView({ type: 'employee_form' })} onEditEmployee={(id) => setCurrentErpView({ type: 'employee_form', employeeId: id })} />;
@@ -143,6 +151,7 @@ const ERPScreen: React.FC<ERPScreenProps> = ({ setView }) => {
                     case 'categories': return <CategoryManagement onNewCategory={() => setCurrentErpView({ type: 'category_form' })} onEditCategory={(id) => setCurrentErpView({ type: 'category_form', categoryId: id })} />;
                     case 'customers': return <CustomerManagement onNewCustomer={() => setCurrentErpView({ type: 'customer_form' })} onEditCustomer={(id) => setCurrentErpView({ type: 'customer_form', customerId: id })} />;
                     case 'suppliers': return <SupplierManagement onNewSupplier={() => setCurrentErpView({ type: 'supplier_form' })} onEditSupplier={(id) => setCurrentErpView({ type: 'supplier_form', supplierId: id })} />;
+                    case 'accountsPayable': return <AccountsPayableManagement onNewAccount={() => setCurrentErpView({ type: 'account_payable_form' })} onEditAccount={(id) => setCurrentErpView({ type: 'account_payable_form', accountId: id })} />;
                     case 'nfeImport': return <NFeImport />;
                     case 'generateOrder': return <GenerateOrder />;
                     case 'inventory': return <InventoryReport />;
@@ -164,6 +173,7 @@ const ERPScreen: React.FC<ERPScreenProps> = ({ setView }) => {
             case 'supplier_form': return { title: 'Editar Fornecedor', activeModule: 'suppliers' as ActiveModule, backAction: () => setCurrentErpView({ type: 'module', id: 'suppliers' }) };
             case 'employee_form': return { title: 'Ficha do Colaborador', activeModule: 'hr' as ActiveModule, backAction: () => setCurrentErpView({ type: 'module', id: 'hr' }) };
             case 'user_form': return { title: 'Configurar Operador', activeModule: 'users' as ActiveModule, backAction: () => setCurrentErpView({ type: 'module', id: 'users' }) };
+            case 'account_payable_form': return { title: 'Editar Conta', activeModule: 'accountsPayable' as ActiveModule, backAction: () => setCurrentErpView({ type: 'module', id: 'accountsPayable' }) };
             default: return { title: 'ERP', activeModule: 'products' as ActiveModule, backAction: null as (() => void) | null };
         }
     };

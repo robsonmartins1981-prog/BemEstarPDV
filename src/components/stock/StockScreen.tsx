@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../services/databaseService';
 import type { Product, StockMovement, StockAlert } from '../../types';
+import { safeLocaleString, safeDate } from '../../utils/dateUtils';
 import Button from '../shared/Button';
 import { Package, AlertTriangle, History, ArrowUpRight, ArrowDownRight, Search, Plus } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
@@ -36,15 +37,19 @@ const StockScreen: React.FC<StockScreenProps> = ({ setView }) => {
     
     setProducts(allProducts);
     setAlerts(allAlerts.filter(a => !a.isResolved));
-    setMovements(allMovements.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+    setMovements(allMovements.sort((a, b) => {
+      const dateA = safeDate(a.date)?.getTime() || 0;
+      const dateB = safeDate(b.date)?.getTime() || 0;
+      return dateB - dateA;
+    }));
   };
 
   /**
    * Filtra os produtos com base no termo de busca
    */
   const filteredProducts = products.filter(p => 
-    p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    p.barcode?.includes(searchTerm)
+    (p.name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) || 
+    (p.barcode || '').includes(searchTerm)
   );
 
   /**
@@ -213,7 +218,7 @@ const StockScreen: React.FC<StockScreenProps> = ({ setView }) => {
                   const prod = products.find(p => p.id === m.productId);
                   return (
                     <tr key={m.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
-                      <td className="px-4 py-3 text-xs font-mono text-gray-500">{new Date(m.date).toLocaleString('pt-BR')}</td>
+                      <td className="px-4 py-3 text-xs font-mono text-gray-500">{safeLocaleString(m.date)}</td>
                       <td className="px-4 py-3 text-xs font-bold text-gray-800 dark:text-white">{prod?.name || 'Desconhecido'}</td>
                       <td className="px-4 py-3">
                         <span className={`px-2 py-1 rounded text-[10px] font-black uppercase ${

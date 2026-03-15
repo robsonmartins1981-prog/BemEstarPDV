@@ -12,19 +12,7 @@ import StockScreen from './components/stock/StockScreen';
 import Sidebar from './components/shared/Sidebar';
 import LoginScreen from './components/auth/LoginScreen';
 import { startSyncService } from './services/syncService'; 
-
-// --- AUTH CONTEXT ---
-interface AuthContextType {
-    user: User | null;
-    login: (user: User) => void;
-    logout: () => void;
-}
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
-export const useAuth = () => {
-    const context = useContext(AuthContext);
-    if (!context) throw new Error('useAuth must be used within an AuthProvider');
-    return context;
-};
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 
 // --- THEME MANAGEMENT ---
 type Theme = 'light' | 'dark' | 'system';
@@ -147,11 +135,8 @@ function AppContent() {
   /**
    * Renderiza o conteúdo principal com base na view selecionada e permissões
    */
+  const { hasPermission } = useAuth();
   const renderContent = () => {
-    const hasPermission = (module: string) => {
-        return user.permissions.includes(module) || user.permissions.some(p => p.startsWith(`${module}:`));
-    };
-
     if (!hasPermission(view)) {
         const availableModules = ['pos', 'erp', 'crm', 'fiscal', 'stock'].filter(hasPermission);
         if (availableModules.length > 0) {
@@ -187,29 +172,12 @@ function AppContent() {
 }
 
 function App() {
-  const [user, setUser] = useState<User | null>(() => {
-      const saved = localStorage.getItem('current_user');
-      try { return saved ? JSON.parse(saved) : null; } catch { return null; }
-  });
-
-  const login = (userData: User) => {
-      localStorage.setItem('current_user', JSON.stringify(userData));
-      setUser(userData);
-  };
-
-  const logout = useCallback(() => {
-      localStorage.removeItem('current_user');
-      setUser(null);
-      // Opcional: recarrega a página para limpar qualquer lixo de memória
-      // window.location.reload(); 
-  }, []);
-
   return (
-    <AuthContext.Provider value={{ user, login, logout }}>
+    <AuthProvider>
         <ThemeProvider>
             <AppContent />
         </ThemeProvider>
-    </AuthContext.Provider>
+    </AuthProvider>
   );
 }
 

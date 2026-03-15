@@ -5,6 +5,7 @@ import type { Product, Category, Supplier, InventoryLot } from '../../types';
 import Button from '../shared/Button';
 import { ImageOff, ReceiptText, Save, History, TrendingUp, TrendingDown, Minus, Upload, X, ImageIcon, Calendar, Boxes, Tag, Hash, Barcode, PackagePlus, Plus, Trash2 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
+import { safeLocaleDateString, safeLocaleTimeString } from '../../utils/dateUtils';
 
 interface ProductFormPageProps {
   productId?: string;
@@ -439,7 +440,9 @@ const ProductFormPage: React.FC<ProductFormPageProps> = ({ productId, categories
                                             ) : (
                                                 [...(formData.salePriceHistory || [])].reverse().map((h, i) => (
                                                     <tr key={i} className="hover:bg-white dark:hover:bg-gray-800 transition-colors">
-                                                        <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{new Date(h.date).toLocaleDateString('pt-BR')} {new Date(h.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</td>
+                                                        <td className="px-4 py-3 text-gray-600 dark:text-gray-400">
+                                                            {safeLocaleDateString(h.date)} {safeLocaleTimeString(h.date, { hour: '2-digit', minute: '2-digit' })}
+                                                        </td>
                                                         <td className="px-4 py-3 text-right font-black text-theme-primary">{formatCurrencyDisplay(h.price)}</td>
                                                     </tr>
                                                 ))
@@ -468,7 +471,9 @@ const ProductFormPage: React.FC<ProductFormPageProps> = ({ productId, categories
                                             ) : (
                                                 [...(formData.purchasePriceHistory || [])].reverse().map((h, i) => (
                                                     <tr key={i} className="hover:bg-white dark:hover:bg-gray-800 transition-colors">
-                                                        <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{new Date(h.date).toLocaleDateString('pt-BR')} {new Date(h.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</td>
+                                                        <td className="px-4 py-3 text-gray-600 dark:text-gray-400">
+                                                            {safeLocaleDateString(h.date)} {safeLocaleTimeString(h.date, { hour: '2-digit', minute: '2-digit' })}
+                                                        </td>
                                                         <td className="px-4 py-3 text-right font-black text-gray-700 dark:text-gray-200">{formatCurrencyDisplay(h.price)}</td>
                                                     </tr>
                                                 ))

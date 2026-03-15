@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { ShoppingCart, Settings, Megaphone, Palette, Landmark, LogOut, Boxes } from 'lucide-react';
 import ThemeModal from './ThemeModal';
 import LogoIcon from './LogoIcon';
-import { useAuth } from '../../App';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface SidebarProps {
   currentView: 'pos' | 'erp' | 'crm' | 'fiscal' | 'stock';
@@ -23,7 +23,7 @@ const navItems = [
  */
 const Sidebar: React.FC<SidebarProps> = ({ currentView, setView }) => {
   const [isThemeModalOpen, setThemeModalOpen] = useState(false);
-  const { user, logout } = useAuth();
+  const { user, logout, hasPermission } = useAuth();
 
   /**
    * Realiza o logout do usuário
@@ -36,10 +36,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView }) => {
   /**
    * Filtra os itens de navegação com base nas permissões do usuário
    */
-  const filteredItems = navItems.filter(item => {
-    const hasPermission = user?.permissions.includes(item.id as any) || user?.permissions.some(p => p.startsWith(`${item.id}:`));
-    return hasPermission;
-  });
+  const filteredItems = navItems.filter(item => hasPermission(item.id));
 
   return (
     <>

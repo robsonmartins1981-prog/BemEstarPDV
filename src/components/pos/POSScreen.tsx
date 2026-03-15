@@ -2,6 +2,7 @@
 import React, { useState, useCallback, useContext, useEffect, useMemo } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import type { SaleItem, Sale, Product, CashOperation, Payment, Customer, ParkedSale, Coupon } from '../../types';
+import { safeDate } from '../../utils/dateUtils';
 import { db } from '../../services/databaseService';
 import { CashSessionContext } from '../../App';
 import { addToQueue } from '../../services/syncService'; 
@@ -160,7 +161,13 @@ const POSScreen: React.FC<POSScreenProps> = ({ setView }) => {
     
     if (!coupon) { setCouponMessage({ type: 'error', text: 'Cupom inválido.' }); return; }
     if (coupon.isActive === 0) { setCouponMessage({ type: 'error', text: 'Cupom inativo.' }); return; }
-    if (new Date() > new Date(coupon.expiryDate)) { setCouponMessage({ type: 'error', text: 'Cupom expirado.' }); return; }
+    
+    const expiryDate = safeDate(coupon.expiryDate);
+    if (expiryDate && new Date() > expiryDate) { 
+      setCouponMessage({ type: 'error', text: 'Cupom expirado.' }); 
+      return; 
+    }
+    
     if (coupon.currentUses >= coupon.maxUses) { setCouponMessage({ type: 'error', text: 'Limite de usos atingido.' }); return; }
 
     setAppliedCoupon(coupon);

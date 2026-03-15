@@ -2,8 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../services/databaseService';
 import { CashSession, CashOperation } from '../../types';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { safeFormat } from '../../utils/dateUtils';
 import { 
   Search, 
   Filter, 
@@ -86,8 +85,8 @@ const CashManagement: React.FC = () => {
   };
 
   const filteredSessions = sessions.filter(session => {
-    const matchesSearch = session.openedBy.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                         session.terminalId.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = (session.openedBy?.toLowerCase() || '').includes(searchTerm.toLowerCase()) || 
+                         (session.terminalId?.toLowerCase() || '').includes(searchTerm.toLowerCase());
     const matchesStatus = filterStatus === 'all' || 
                          (filterStatus === 'open' && !session.closedAt) || 
                          (filterStatus === 'closed' && session.closedAt);
@@ -173,7 +172,7 @@ const CashManagement: React.FC = () => {
                     </h3>
                     <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
                       <span className="flex items-center gap-1"><User size={12} /> {session.openedBy}</span>
-                      <span className="flex items-center gap-1"><Calendar size={12} /> {format(new Date(session.openedAt), "dd MMM yyyy HH:mm", { locale: ptBR })}</span>
+                      <span className="flex items-center gap-1"><Calendar size={12} /> {safeFormat(session.openedAt, "dd MMM yyyy HH:mm")}</span>
                     </div>
                   </div>
                 </div>
@@ -256,7 +255,7 @@ const CashManagement: React.FC = () => {
                               .map(op => (
                                 <tr key={op.id} className="group">
                                   <td className="py-3 text-gray-600 dark:text-gray-400">
-                                    {format(new Date(op.timestamp), "HH:mm:ss")}
+                                    {safeFormat(op.timestamp, "HH:mm:ss")}
                                   </td>
                                   <td className="py-3">
                                     <span className={clsx(

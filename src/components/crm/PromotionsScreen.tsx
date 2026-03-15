@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../services/databaseService';
 import type { Promotion } from '../../types';
+import { safeDate, safeLocaleDateString } from '../../utils/dateUtils';
 import Button from '../shared/Button';
 import { Plus, Edit, Trash2, Tag, Calendar, CheckCircle, XCircle } from 'lucide-react';
 
@@ -47,7 +48,10 @@ const PromotionsScreen: React.FC<PromotionsScreenProps> = ({ onNewPromotion, onE
   const isPromotionRunning = (promo: Promotion) => {
     if (!promo.active) return false;
     const now = new Date();
-    return now >= new Date(promo.startDate) && now <= new Date(promo.endDate);
+    const startDate = safeDate(promo.startDate);
+    const endDate = safeDate(promo.endDate);
+    if (!startDate || !endDate) return false;
+    return now >= startDate && now <= endDate;
   };
 
   return (
@@ -77,7 +81,7 @@ const PromotionsScreen: React.FC<PromotionsScreenProps> = ({ onNewPromotion, onE
                     <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 mt-1">
                       <Calendar size={12} />
                       <span>
-                        {new Date(promo.startDate).toLocaleDateString('pt-BR')} até {new Date(promo.endDate).toLocaleDateString('pt-BR')}
+                        {safeLocaleDateString(promo.startDate)} até {safeLocaleDateString(promo.endDate)}
                       </span>
                     </div>
                   </div>

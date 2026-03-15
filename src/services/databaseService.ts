@@ -40,84 +40,50 @@ let db: IDBPDatabase<AppDB>;
 export async function initDB() {
   if (db) return; 
 
-  db = await openDB<AppDB>('BemEstarPDV', 25, {
+  db = await openDB<AppDB>('BemEstarPDV', 26, {
     upgrade(database, oldVersion, newVersion, transaction) {
-      if (!database.objectStoreNames.contains('stockMovements')) {
-        database.createObjectStore('stockMovements', { keyPath: 'id' }).createIndex('productId', 'productId');
-      }
-      if (!database.objectStoreNames.contains('stockAlerts')) {
-        database.createObjectStore('stockAlerts', { keyPath: 'id' }).createIndex('productId', 'productId');
-      }
-      if (!database.objectStoreNames.contains('products')) {
-        database.createObjectStore('products', { keyPath: 'id' }).createIndex('name', 'name');
-      }
-      if (!database.objectStoreNames.contains('sales')) {
-        database.createObjectStore('sales', { keyPath: 'id' }).createIndex('date', 'date');
-      }
-      if (!database.objectStoreNames.contains('cashSessions')) {
-        database.createObjectStore('cashSessions', { keyPath: 'id' }).createIndex('openedAt', 'openedAt');
-      }
-      if (!database.objectStoreNames.contains('cashOperations')) {
-        database.createObjectStore('cashOperations', { keyPath: 'id' }).createIndex('sessionId', 'sessionId');
-      }
-      if (!database.objectStoreNames.contains('suppliers')) {
-        database.createObjectStore('suppliers', { keyPath: 'id' }).createIndex('cnpj', 'cnpj');
-      }
-      if (!database.objectStoreNames.contains('customers')) {
-        database.createObjectStore('customers', { keyPath: 'id' }).createIndex('cpf', 'cpf');
-      }
-      if (!database.objectStoreNames.contains('expenses')) {
-        database.createObjectStore('expenses', { keyPath: 'id' }).createIndex('dueDate', 'dueDate');
-      }
-      if (!database.objectStoreNames.contains('segments')) {
-        database.createObjectStore('segments', { keyPath: 'id' }).createIndex('name', 'name');
-      }
-      if (!database.objectStoreNames.contains('campaigns')) {
-        database.createObjectStore('campaigns', { keyPath: 'id' }).createIndex('name', 'name');
-      }
-      if (!database.objectStoreNames.contains('automationRules')) {
-        database.createObjectStore('automationRules', { keyPath: 'id' });
-      }
-      if (!database.objectStoreNames.contains('inventoryLots')) {
-        database.createObjectStore('inventoryLots', { keyPath: 'id' }).createIndex('productId', 'productId');
-      }
-      if (!database.objectStoreNames.contains('inventoryAdjustments')) {
-        database.createObjectStore('inventoryAdjustments', { keyPath: 'id' }).createIndex('productId', 'productId');
-      }
-      if (!database.objectStoreNames.contains('parkedSales')) {
-        database.createObjectStore('parkedSales', { keyPath: 'id' }).createIndex('createdAt', 'createdAt');
-      }
-      if (!database.objectStoreNames.contains('categories')) {
-        database.createObjectStore('categories', { keyPath: 'id' }).createIndex('name', 'name');
-      }
-      if (!database.objectStoreNames.contains('coupons')) {
-        database.createObjectStore('coupons', { keyPath: 'id' }).createIndex('code', 'code');
-      }
-      if (!database.objectStoreNames.contains('fiscalConfig')) {
-        database.createObjectStore('fiscalConfig', { keyPath: 'id' });
-      }
-      if (!database.objectStoreNames.contains('syncQueue')) {
-        database.createObjectStore('syncQueue', { keyPath: 'id' }).createIndex('status', 'status');
-      }
-      if (!database.objectStoreNames.contains('employees')) {
-        database.createObjectStore('employees', { keyPath: 'id' }).createIndex('status', 'status');
-      }
-      if (!database.objectStoreNames.contains('auditLogs')) {
-        database.createObjectStore('auditLogs', { keyPath: 'id' }).createIndex('timestamp', 'timestamp');
-      }
+      const stores = [
+        { name: 'products', indexes: ['name', 'scaleCode', 'categoryId', 'supplierId'] },
+        { name: 'sales', indexes: ['date', 'customerId'] },
+        { name: 'parkedSales', indexes: ['createdAt'] },
+        { name: 'cashSessions', indexes: ['openedAt'] },
+        { name: 'cashOperations', indexes: ['sessionId', 'date'] },
+        { name: 'categories', indexes: ['name'] },
+        { name: 'suppliers', indexes: ['name', 'cnpj'] },
+        { name: 'customers', indexes: ['name', 'cpf'] },
+        { name: 'expenses', indexes: ['dueDate', 'status'] },
+        { name: 'inventoryLots', indexes: ['productId', 'expirationDate'] },
+        { name: 'inventoryAdjustments', indexes: ['productId', 'date'] },
+        { name: 'stockMovements', indexes: ['productId'] },
+        { name: 'stockAlerts', indexes: ['productId'] },
+        { name: 'segments', indexes: ['name'] },
+        { name: 'campaigns', indexes: ['name', 'status'] },
+        { name: 'automationRules', indexes: ['trigger', 'isActive'] },
+        { name: 'coupons', indexes: ['code'] },
+        { name: 'promotions', indexes: ['active'] },
+        { name: 'fiscalConfig', indexes: [] },
+        { name: 'syncQueue', indexes: ['status', 'type'] },
+        { name: 'employees', indexes: ['status'] },
+        { name: 'auditLogs', indexes: ['timestamp', 'module'] },
+        { name: 'deliveryZones', indexes: ['neighborhood'] },
+        { name: 'storeSettings', indexes: [] },
+        { name: 'users', indexes: ['username'] }
+      ];
 
-      if (!database.objectStoreNames.contains('deliveryZones')) {
-        database.createObjectStore('deliveryZones', { keyPath: 'id' }).createIndex('neighborhood', 'neighborhood');
-      }
-      if (!database.objectStoreNames.contains('storeSettings')) {
-        database.createObjectStore('storeSettings', { keyPath: 'id' });
-      }
-      if (!database.objectStoreNames.contains('users')) {
-        database.createObjectStore('users', { keyPath: 'id' }).createIndex('username', 'username');
-      }
-      if (!database.objectStoreNames.contains('promotions')) {
-        database.createObjectStore('promotions', { keyPath: 'id' }).createIndex('active', 'active');
-      }
+      stores.forEach(storeConfig => {
+        let store;
+        if (!database.objectStoreNames.contains(storeConfig.name as any)) {
+          store = database.createObjectStore(storeConfig.name as any, { keyPath: 'id' });
+        } else {
+          store = transaction.objectStore(storeConfig.name as any);
+        }
+
+        storeConfig.indexes.forEach(indexName => {
+          if (!store.indexNames.contains(indexName)) {
+            store.createIndex(indexName, indexName);
+          }
+        });
+      });
     },
   });
 
@@ -172,7 +138,7 @@ export async function importFullBackup(jsonContent: string) {
 
     for (const storeName of stores) {
         const dataArray = backupData[storeName];
-        if (Array.isArray(dataArray)) {
+        if (Array.isArray(dataArray) && db.objectStoreNames.contains(storeName as any)) {
             const tx = db.transaction(storeName as any, 'readwrite');
             for (const item of dataArray) {
                 await tx.store.put(item);

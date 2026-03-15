@@ -106,6 +106,7 @@ export interface Sale {
   change: number; 
   customerCPF?: string; 
   customerId?: string; 
+  sessionId?: string; 
   isSynced: boolean; 
   couponCodeApplied?: string; 
   manualDiscountType?: 'PERCENTAGE' | 'FIXED_AMOUNT'; 
