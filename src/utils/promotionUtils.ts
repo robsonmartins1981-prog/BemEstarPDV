@@ -23,35 +23,28 @@ export async function getActivePromotions(): Promise<Promotion[]> {
 
 /**
  * Calcula o preço promocional de um produto com base nas promoções ativas.
- * Se houver mais de uma promoção para o mesmo produto, aplica a de maior desconto.
+ * Se houver mais de uma promoção para o mesmo produto, aplica a de menor preço.
  */
 export function getPromotionalPrice(product: Product, activePromotions: Promotion[]): number {
-    const productPromos = activePromotions.filter(promo => promo.productIds.includes(product.id));
-    
-    if (productPromos.length === 0) return product.price;
+    let lowestPrice = product.price;
+    let foundPromotion = false;
 
-    let bestPrice = product.price;
-
-    for (const promo of productPromos) {
-        let currentPromoPrice = product.price;
-        
-        if (promo.discountType === 'PERCENTAGE') {
-            currentPromoPrice = product.price * (1 - promo.discountValue / 100);
-        } else if (promo.discountType === 'FIXED') {
-            currentPromoPrice = Math.max(0, product.price - promo.discountValue);
-        }
-
-        if (currentPromoPrice < bestPrice) {
-            bestPrice = currentPromoPrice;
+    for (const promo of activePromotions) {
+        const promoItem = promo.items.find(item => item.productId === product.id);
+        if (promoItem) {
+            if (promoItem.promotionalPrice < lowestPrice) {
+                lowestPrice = promoItem.promotionalPrice;
+                foundPromotion = true;
+            }
         }
     }
 
-    return bestPrice;
+    return lowestPrice;
 }
 
 /**
  * Verifica se um produto está em promoção.
  */
 export function isProductOnSale(product: Product, activePromotions: Promotion[]): boolean {
-    return activePromotions.some(promo => promo.productIds.includes(product.id));
+    return activePromotions.some(promo => promo.items.some(item => item.productId === product.id));
 }

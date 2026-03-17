@@ -241,19 +241,25 @@ export interface Customer {
   birthDate?: Date; 
   creditLimit?: number; 
   observations?: string; 
+  tags?: string[];
 }
 export interface ExpenseSubItem { id: string; description: string; amount: number; categoryId?: string; }
 export interface Expense { id: string; description: string; amount: number; supplierId?: string; categoryId?: string; dueDate: Date; purchaseDate: Date; paidDate?: Date; status: 'PENDING' | 'PAID'; isFixed?: boolean; subItems?: ExpenseSubItem[]; }
 export interface InventoryLot { id: string; productId: string; supplierId?: string; lotNumber?: string; quantity: number; expirationDate?: Date; entryDate: Date; costPrice: number; }
 export interface InventoryAdjustment { id: string; productId: string; lotId: string; quantityChange: number; reason: string; date: Date; }
+export interface PromotionItem {
+  productId: string;
+  productName: string;
+  originalPrice: number;
+  promotionalPrice: number;
+}
+
 export interface Promotion {
   id: string;
   name: string;
   startDate: Date;
   endDate: Date;
-  discountType: 'PERCENTAGE' | 'FIXED';
-  discountValue: number;
-  productIds: string[];
+  items: PromotionItem[];
   active: boolean;
 }
 
