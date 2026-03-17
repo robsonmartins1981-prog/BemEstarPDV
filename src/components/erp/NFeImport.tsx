@@ -1,9 +1,11 @@
 
-import React, { useState, useRef } from 'react';
-import { FileCode, Upload, CheckCircle2, AlertCircle, ArrowRight, Package, Truck, DollarSign, Calendar } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { FileCode, Upload, CheckCircle2, AlertCircle, ArrowRight, Package, Truck, DollarSign, Calendar, Search, Link as LinkIcon, Plus, X } from 'lucide-react';
 import Button from '../shared/Button';
+import ProductSearchModal from '../shared/ProductSearchModal';
+import { formatCurrency } from '../../utils/formatUtils';
 import { db } from '../../services/databaseService';
-import type { NFeData, NFeItem, Product, Supplier, Expense } from '../../types';
+import type { NFeData, NFeItem, Product, Supplier, Expense, InventoryLot, StockMovement } from '../../types';
 import { v4 as uuidv4 } from 'uuid';
 
 const NFeImport: React.FC = () => {
@@ -12,6 +14,7 @@ const NFeImport: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [importStep, setImportStep] = useState<'UPLOAD' | 'REVIEW'>('UPLOAD');
+  const [linkingItemIdx, setLinkingItemIdx] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -24,7 +27,7 @@ const NFeImport: React.FC = () => {
     setLoading(true);
     setError(null);
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       try {
         const content = e.target?.result as string;
         const parser = new DOMParser();
@@ -39,17 +42,27 @@ const NFeImport: React.FC = () => {
 
         const detList = xmlDoc.getElementsByTagName('det');
         const items: NFeItem[] = [];
+        const allProducts = await db.getAll('products');
+
         for (let i = 0; i < detList.length; i++) {
           const prod = detList[i].getElementsByTagName('prod')[0];
+          const code = prod.getElementsByTagName('cProd')[0]?.textContent || '';
+          const name = prod.getElementsByTagName('xProd')[0]?.textContent || '';
+          
+          // Try to auto-link
+          const existingProduct = allProducts.find(p => p.barcode === code || p.name.toLowerCase() === name.toLowerCase());
+
           items.push({
-            code: prod.getElementsByTagName('cProd')[0]?.textContent || '',
-            name: prod.getElementsByTagName('xProd')[0]?.textContent || '',
+            code,
+            name,
             ncm: prod.getElementsByTagName('NCM')[0]?.textContent || '',
             quantity: parseFloat(prod.getElementsByTagName('qCom')[0]?.textContent || '0'),
             unitPrice: parseFloat(prod.getElementsByTagName('vUnCom')[0]?.textContent || '0'),
             totalPrice: parseFloat(prod.getElementsByTagName('vProd')[0]?.textContent || '0'),
-            status: 'NEW',
+            status: existingProduct ? 'LINKED' : 'NEW',
+            linkedProductDetails: existingProduct,
             expirationDate: '',
+            lotNumber: '',
             conversionFactor: 1
           });
         }
@@ -80,6 +93,25 @@ const NFeImport: React.FC = () => {
     reader.readAsText(file);
   };
 
+  const handleLinkProduct = (idx: number, product: Product | null) => {
+    if (!nfeData) return;
+    const newItems = [...nfeData.items];
+    newItems[idx] = {
+      ...newItems[idx],
+      status: product ? 'LINKED' : 'NEW',
+      linkedProductDetails: product || undefined
+    };
+    setNfeData({ ...nfeData, items: newItems });
+    setLinkingItemIdx(null);
+  };
+
+  const updateItemField = (idx: number, field: keyof NFeItem, value: any) => {
+    if (!nfeData) return;
+    const newItems = [...nfeData.items];
+    newItems[idx] = { ...newItems[idx], [field]: value };
+    setNfeData({ ...nfeData, items: newItems });
+  };
+
   const handleImport = async () => {
     if (!nfeData) return;
     setLoading(true);
@@ -95,29 +127,59 @@ const NFeImport: React.FC = () => {
         await db.put('suppliers', supplier);
       }
 
-      // 2. Create Products and Update Stock (Simplified for now)
+      // 2. Process Items
       for (const item of nfeData.items) {
-        let product = (await db.getAll('products')).find(p => p.barcode === item.code || p.name === item.name);
-        if (!product) {
+        let product: Product;
+        
+        if (item.status === 'LINKED' && item.linkedProductDetails) {
+          product = item.linkedProductDetails;
+          product.stock += item.quantity * item.conversionFactor;
+          product.costPrice = item.unitPrice / item.conversionFactor;
+          await db.put('products', product);
+        } else {
           product = {
             id: uuidv4(),
             name: item.name,
             barcode: item.code,
-            price: item.unitPrice * 1.5, // Default 50% markup
-            costPrice: item.unitPrice,
-            stock: item.quantity,
+            price: (item.unitPrice / item.conversionFactor) * 1.5,
+            costPrice: item.unitPrice / item.conversionFactor,
+            stock: item.quantity * item.conversionFactor,
+            unitType: 'UN',
             isBulk: false,
-            categoryId: 'default'
+            categoryId: 'default',
+            supplierId: supplier.id
           };
           await db.put('products', product);
-        } else {
-          product.stock += item.quantity;
-          product.costPrice = item.unitPrice;
-          await db.put('products', product);
         }
+
+        // 3. Create Inventory Lot if expiration date or lot number is provided
+        if (item.expirationDate || item.lotNumber) {
+          const lot: InventoryLot = {
+            id: uuidv4(),
+            productId: product.id,
+            supplierId: supplier.id,
+            lotNumber: item.lotNumber,
+            quantity: item.quantity * item.conversionFactor,
+            expirationDate: item.expirationDate ? new Date(item.expirationDate) : undefined,
+            entryDate: new Date(),
+            costPrice: item.unitPrice / item.conversionFactor
+          };
+          await db.put('inventoryLots', lot);
+        }
+
+        // 4. Create Stock Movement
+        const movement: StockMovement = {
+          id: uuidv4(),
+          productId: product.id,
+          quantity: item.quantity * item.conversionFactor,
+          type: 'IN',
+          reason: `Importação NF-e - ${nfeData.supplier.name}`,
+          date: new Date()
+        };
+        await db.put('stockMovements', movement);
       }
 
-      // 3. Create Accounts Payable (Expenses)
+      // 5. Create Accounts Payable (Expenses)
       const duplicatas = (nfeData as any).duplicatas || [];
       if (duplicatas.length > 0) {
         for (const dup of duplicatas) {
@@ -126,18 +188,19 @@ const NFeImport: React.FC = () => {
             description: `NF-e ${dup.number} - ${nfeData.supplier.name}`,
             amount: dup.amount,
             dueDate: dup.dueDate,
+            purchaseDate: nfeData.issueDate,
             status: 'PENDING',
             supplierId: supplier.id
           };
           await db.put('expenses', expense);
         }
       } else {
-        // Create a single account for the total if no installments found
         const expense: Expense = {
           id: uuidv4(),
           description: `NF-e Total - ${nfeData.supplier.name}`,
           amount: nfeData.totalAmount,
           dueDate: nfeData.issueDate,
+          purchaseDate: nfeData.issueDate,
           status: 'PENDING',
           supplierId: supplier.id
         };
@@ -230,7 +293,7 @@ const NFeImport: React.FC = () => {
                 <h3 className="font-black uppercase text-xs text-gray-400 tracking-widest">Itens</h3>
               </div>
               <p className="font-bold text-gray-800 dark:text-white">{nfeData?.items.length} Produtos</p>
-              <p className="text-xs text-gray-500">Total: R$ {nfeData?.totalAmount.toFixed(2)}</p>
+              <p className="text-xs text-gray-500">Total: {formatCurrency(nfeData?.totalAmount)}</p>
             </div>
 
             <div className="bg-gray-50 dark:bg-gray-900/50 p-6 rounded-3xl border dark:border-gray-700">
@@ -241,7 +304,7 @@ const NFeImport: React.FC = () => {
               <p className="font-bold text-gray-800 dark:text-white">
                 {(nfeData as any)?.duplicatas.length || 1} Parcelas
               </p>
-              <p className="text-xs text-gray-500">Vencimento: {nfeData?.issueDate.toLocaleDateString()}</p>
+              <p className="text-xs text-gray-500">Vencimento: {nfeData?.issueDate.toLocaleDateString('pt-BR')}</p>
             </div>
           </div>
 
@@ -249,22 +312,73 @@ const NFeImport: React.FC = () => {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-gray-50 dark:bg-gray-900/50 border-b dark:border-gray-700">
-                  <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Produto</th>
-                  <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Qtd</th>
+                  <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Produto XML</th>
+                  <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Vincular Produto</th>
+                  <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Qtd / Fator</th>
+                  <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Lote / Validade</th>
                   <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Preço Un.</th>
-                  <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Total</th>
                 </tr>
               </thead>
               <tbody>
                 {nfeData?.items.map((item, idx) => (
-                  <tr key={idx} className="border-b dark:border-gray-700">
+                  <tr key={idx} className="border-b dark:border-gray-700 hover:bg-gray-50/50 dark:hover:bg-gray-900/20 transition-colors">
                     <td className="px-6 py-4">
-                      <p className="text-sm font-bold text-gray-800 dark:text-white uppercase">{item.name}</p>
+                      <p className="text-sm font-bold text-gray-800 dark:text-white uppercase truncate max-w-[200px]" title={item.name}>{item.name}</p>
                       <p className="text-[10px] text-gray-400">Cód: {item.code}</p>
                     </td>
-                    <td className="px-6 py-4 text-center text-sm font-bold text-gray-700 dark:text-gray-300">{item.quantity}</td>
-                    <td className="px-6 py-4 text-right text-sm font-bold text-gray-700 dark:text-gray-300">R$ {item.unitPrice.toFixed(2)}</td>
-                    <td className="px-6 py-4 text-right text-sm font-black text-gray-800 dark:text-white">R$ {item.totalPrice.toFixed(2)}</td>
+                    <td className="px-6 py-4">
+                      <button 
+                        onClick={() => setLinkingItemIdx(idx)}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all ${item.status === 'LINKED' ? 'bg-emerald-50 border-emerald-200 text-emerald-600' : 'bg-gray-50 border-gray-200 text-gray-500 hover:border-theme-primary hover:text-theme-primary'}`}
+                      >
+                        {item.status === 'LINKED' ? (
+                          <>
+                            <CheckCircle2 size={14} />
+                            <span className="truncate max-w-[120px]">{item.linkedProductDetails?.name}</span>
+                          </>
+                        ) : (
+                          <>
+                            <LinkIcon size={14} />
+                            <span>Vincular</span>
+                          </>
+                        )}
+                      </button>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex flex-col items-center gap-1">
+                        <span className="text-sm font-bold text-gray-700 dark:text-gray-300">{item.quantity}</span>
+                        <div className="flex items-center gap-1 bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-700 rounded-lg px-2 py-0.5">
+                          <span className="text-[10px] text-gray-400 font-bold">x</span>
+                          <input 
+                            type="number" 
+                            className="w-8 bg-transparent border-none outline-none text-[10px] font-bold text-center"
+                            value={item.conversionFactor}
+                            onChange={(e) => updateItemField(idx, 'conversionFactor', parseFloat(e.target.value) || 1)}
+                          />
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex flex-col gap-1">
+                        <input 
+                          type="text" 
+                          placeholder="Lote"
+                          className="bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-700 rounded-lg px-2 py-1 text-[10px] font-bold outline-none focus:border-theme-primary"
+                          value={item.lotNumber || ''}
+                          onChange={(e) => updateItemField(idx, 'lotNumber', e.target.value)}
+                        />
+                        <input 
+                          type="date" 
+                          className="bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-700 rounded-lg px-2 py-1 text-[10px] font-bold outline-none focus:border-theme-primary"
+                          value={item.expirationDate}
+                          onChange={(e) => updateItemField(idx, 'expirationDate', e.target.value)}
+                        />
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <p className="text-sm font-bold text-gray-700 dark:text-gray-300">{formatCurrency(item.unitPrice)}</p>
+                      <p className="text-[10px] font-black text-gray-800 dark:text-white">Total: {formatCurrency(item.totalPrice)}</p>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -272,6 +386,13 @@ const NFeImport: React.FC = () => {
           </div>
         </div>
       )}
+
+      <ProductSearchModal 
+        isOpen={linkingItemIdx !== null}
+        onClose={() => setLinkingItemIdx(null)}
+        onSelect={(product) => linkingItemIdx !== null && handleLinkProduct(linkingItemIdx, product)}
+        title="Vincular Produto da Nota"
+      />
     </div>
   );
 };

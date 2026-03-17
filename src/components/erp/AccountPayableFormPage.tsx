@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Button from '../shared/Button';
-import { Save, ArrowLeft, Calendar, DollarSign, FileText, Truck } from 'lucide-react';
+import { Save, ArrowLeft, Calendar, DollarSign, FileText, Truck, Plus, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 import { db } from '../../services/databaseService';
 import type { Expense, Supplier } from '../../types';
 import { v4 as uuidv4 } from 'uuid';
@@ -15,8 +15,10 @@ const AccountPayableFormPage: React.FC<AccountPayableFormPageProps> = ({ account
     description: '',
     amount: 0,
     dueDate: new Date(),
+    purchaseDate: new Date(),
     status: 'PENDING',
-    supplierId: ''
+    supplierId: '',
+    isFixed: false
   });
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(false);
@@ -46,8 +48,11 @@ const AccountPayableFormPage: React.FC<AccountPayableFormPageProps> = ({ account
         description: formData.description || '',
         amount: formData.amount || 0,
         dueDate: formData.dueDate instanceof Date ? formData.dueDate : new Date(formData.dueDate!),
+        purchaseDate: formData.purchaseDate instanceof Date ? formData.purchaseDate : new Date(formData.purchaseDate || new Date()),
         status: formData.status || 'PENDING',
         supplierId: formData.supplierId,
+        isFixed: formData.isFixed || false,
+        subItems: formData.subItems,
         paidDate: formData.status === 'PAID' ? (formData.paidDate || new Date()) : undefined
       };
 
@@ -121,6 +126,20 @@ const AccountPayableFormPage: React.FC<AccountPayableFormPageProps> = ({ account
           </div>
 
           <div>
+            <label className="block text-[10px] font-black text-gray-400 uppercase ml-1 mb-1">Data da Compra</label>
+            <div className="relative">
+              <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+              <input 
+                type="date" 
+                required
+                value={formData.purchaseDate instanceof Date ? formData.purchaseDate.toISOString().split('T')[0] : new Date(formData.purchaseDate!).toISOString().split('T')[0]}
+                onChange={(e) => setFormData({ ...formData, purchaseDate: new Date(e.target.value) })}
+                className="w-full pl-12 pr-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-700 rounded-2xl outline-none focus:border-theme-primary text-gray-800 dark:text-white" 
+              />
+            </div>
+          </div>
+
+          <div>
             <label className="block text-[10px] font-black text-gray-400 uppercase ml-1 mb-1">Data de Vencimento</label>
             <div className="relative">
               <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
@@ -152,6 +171,94 @@ const AccountPayableFormPage: React.FC<AccountPayableFormPageProps> = ({ account
                 Pago
               </button>
             </div>
+          </div>
+
+          <div className="flex items-center gap-3 p-4 bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-700 rounded-2xl">
+            <input 
+              type="checkbox" 
+              id="isFixed"
+              checked={formData.isFixed || false}
+              onChange={(e) => setFormData({ ...formData, isFixed: e.target.checked })}
+              className="w-5 h-5 rounded border-gray-300 text-theme-primary focus:ring-theme-primary"
+            />
+            <label htmlFor="isFixed" className="text-xs font-black text-gray-700 dark:text-gray-200 uppercase tracking-widest cursor-pointer">
+              Custo Fixo (Recorrente)
+            </label>
+          </div>
+        </div>
+
+        {/* Sub-items Section (Credit Card Detail) */}
+        <div className="bg-gray-50 dark:bg-gray-900/50 p-6 rounded-3xl border dark:border-gray-700 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Plus size={18} className="text-theme-primary" />
+              <h3 className="text-sm font-black uppercase tracking-widest text-gray-800 dark:text-white">Detalhamento da Fatura (Opcional)</h3>
+            </div>
+            <Button 
+              type="button" 
+              variant="secondary" 
+              size="sm"
+              onClick={() => {
+                const newSubItems = [...(formData.subItems || []), { id: uuidv4(), description: '', amount: 0 }];
+                setFormData({ ...formData, subItems: newSubItems });
+              }}
+            >
+              Adicionar Item
+            </Button>
+          </div>
+          
+          <div className="space-y-3">
+            {(formData.subItems || []).map((item, idx) => (
+              <div key={item.id} className="flex items-center gap-3 bg-white dark:bg-gray-800 p-3 rounded-2xl border dark:border-gray-700 shadow-sm">
+                <div className="flex-1">
+                  <input 
+                    type="text" 
+                    placeholder="Descrição do gasto"
+                    className="w-full bg-transparent border-none outline-none text-xs font-bold text-gray-800 dark:text-white"
+                    value={item.description}
+                    onChange={(e) => {
+                      const newSubItems = [...(formData.subItems || [])];
+                      newSubItems[idx].description = e.target.value;
+                      setFormData({ ...formData, subItems: newSubItems });
+                    }}
+                  />
+                </div>
+                <div className="w-32 flex items-center gap-2 border-l dark:border-gray-700 pl-3">
+                  <span className="text-[10px] font-black text-gray-400">R$</span>
+                  <input 
+                    type="number" 
+                    step="0.01"
+                    placeholder="0,00"
+                    className="w-full bg-transparent border-none outline-none text-xs font-bold text-gray-800 dark:text-white"
+                    value={item.amount}
+                    onChange={(e) => {
+                      const newSubItems = [...(formData.subItems || [])];
+                      newSubItems[idx].amount = parseFloat(e.target.value) || 0;
+                      
+                      // Auto-update total amount if it's a credit card bill
+                      const totalSubItems = newSubItems.reduce((acc, curr) => acc + curr.amount, 0);
+                      setFormData({ ...formData, subItems: newSubItems, amount: totalSubItems });
+                    }}
+                  />
+                </div>
+                <button 
+                  type="button"
+                  onClick={() => {
+                    const newSubItems = (formData.subItems || []).filter((_, i) => i !== idx);
+                    const totalSubItems = newSubItems.reduce((acc, curr) => acc + curr.amount, 0);
+                    setFormData({ ...formData, subItems: newSubItems, amount: totalSubItems > 0 ? totalSubItems : formData.amount });
+                  }}
+                  className="p-1.5 hover:bg-red-50 text-gray-400 hover:text-red-500 rounded-lg transition-colors"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            ))}
+            {(formData.subItems || []).length === 0 && (
+              <p className="text-center py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                Nenhum item detalhado. O valor total será usado.
+              </p>
+            )}
           </div>
         </div>
         

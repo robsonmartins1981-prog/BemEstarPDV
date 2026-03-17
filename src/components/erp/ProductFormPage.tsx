@@ -3,8 +3,10 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { db } from '../../services/databaseService';
 import type { Product, Category, Supplier, InventoryLot } from '../../types';
 import Button from '../shared/Button';
-import { ImageOff, ReceiptText, Save, History, TrendingUp, TrendingDown, Minus, Upload, X, ImageIcon, Calendar, Boxes, Tag, Hash, Barcode, PackagePlus, Plus, Trash2 } from 'lucide-react';
+import ProductSearchModal from '../shared/ProductSearchModal';
+import { ImageOff, ReceiptText, Save, History, TrendingUp, TrendingDown, Minus, Upload, X, ImageIcon, Calendar, Boxes, Tag, Hash, Barcode, PackagePlus, Plus, Trash2, Search } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
+import { formatCurrency, formatDecimal, parseCurrencyInput } from '../../utils/formatUtils';
 import { safeLocaleDateString, safeLocaleTimeString } from '../../utils/dateUtils';
 
 interface ProductFormPageProps {
@@ -21,6 +23,7 @@ const ProductFormPage: React.FC<ProductFormPageProps> = ({ productId, categories
     const [activeTab, setActiveTab] = useState('main');
     
     const [kitItemInput, setKitItemInput] = useState({ productId: '', quantity: 1 });
+    const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
     
     const [initialLot, setInitialLot] = useState({
         number: 'LOTE-' + new Date().getFullYear() + '-' + Math.floor(Math.random() * 1000),
@@ -50,12 +53,14 @@ const ProductFormPage: React.FC<ProductFormPageProps> = ({ productId, categories
                 setFormData({
                     id: '', // Será preenchido manualmente ou via lógica
                     barcode: '',
+                    sku: '',
                     name: '',
                     brand: '',
                     price: 0,
                     costPrice: 0,
                     stock: 0,
                     minStock: 0,
+                    unitType: 'UN',
                     isBulk: false,
                     scaleCode: '',
                     ncm: '',
@@ -74,16 +79,6 @@ const ProductFormPage: React.FC<ProductFormPageProps> = ({ productId, categories
         fetchData();
     }, [productId, onBack]);
 
-    const formatCurrencyDisplay = (val: number | undefined) => {
-        if (val === undefined) return '0,00';
-        return val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    };
-
-    const parseCurrencyInput = (value: string): number => {
-        const digits = value.replace(/\D/g, '');
-        return parseInt(digits || '0', 10) / 100;
-    };
-
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value, type } = e.target;
         if (type === 'checkbox') {
@@ -92,6 +87,12 @@ const ProductFormPage: React.FC<ProductFormPageProps> = ({ productId, categories
         } else if (name === 'price' || name === 'costPrice') {
             const numericValue = parseCurrencyInput(value);
             setFormData(prev => ({ ...prev, [name]: numericValue }));
+        } else if (name === 'unitType') {
+            setFormData(prev => ({ 
+                ...prev, 
+                unitType: value as any,
+                isBulk: value === 'KG'
+            }));
         } else {
              setFormData(prev => ({ ...prev, [name]: type === 'number' ? parseFloat(value) : value }));
         }
@@ -203,6 +204,12 @@ const ProductFormPage: React.FC<ProductFormPageProps> = ({ productId, categories
         setKitItemInput({ productId: '', quantity: 1 });
     };
 
+    const handleSelectProductForKit = (product: Product | null) => {
+        if (product) {
+            setKitItemInput(prev => ({ ...prev, productId: product.id }));
+        }
+    };
+
     const handleRemoveKitItem = (productIdToRemove: string) => {
         setFormData(prev => ({
             ...prev,
@@ -243,7 +250,7 @@ const ProductFormPage: React.FC<ProductFormPageProps> = ({ productId, categories
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                         <div className="space-y-5">
                             {/* LINHA DE CÓDIGOS */}
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-3 gap-4">
                                 <div>
                                     <label className="block text-[10px] font-black text-gray-400 uppercase ml-1 mb-1 flex items-center gap-1"><Hash size={12}/> Código Interno (ID)</label>
                                     <input 
@@ -257,7 +264,7 @@ const ProductFormPage: React.FC<ProductFormPageProps> = ({ productId, categories
                                         placeholder="Ex: 1001"/>
                                 </div>
                                 <div>
-                                    <label className="block text-[10px] font-black text-gray-400 uppercase ml-1 mb-1 flex items-center gap-1"><Barcode size={12}/> Código de Barras (EAN)</label>
+                                    <label className="block text-[10px] font-black text-gray-400 uppercase ml-1 mb-1 flex items-center gap-1"><Barcode size={12}/> EAN / Barras</label>
                                     <input 
                                         type="text" 
                                         name="barcode" 
@@ -265,6 +272,16 @@ const ProductFormPage: React.FC<ProductFormPageProps> = ({ productId, categories
                                         onChange={handleChange} 
                                         className={inputStyle} 
                                         placeholder="789..."/>
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black text-gray-400 uppercase ml-1 mb-1 flex items-center gap-1"><PackagePlus size={12}/> SKU / Ref.</label>
+                                    <input 
+                                        type="text" 
+                                        name="sku" 
+                                        value={formData.sku || ''} 
+                                        onChange={handleChange} 
+                                        className={inputStyle} 
+                                        placeholder="REF-001"/>
                                 </div>
                             </div>
 
@@ -284,7 +301,7 @@ const ProductFormPage: React.FC<ProductFormPageProps> = ({ productId, categories
                                         <input 
                                             type="text" 
                                             name="price" 
-                                            value={formatCurrencyDisplay(formData.price)} 
+                                            value={formatDecimal(formData.price)} 
                                             onChange={handleChange} 
                                             required 
                                             className={inputStyle + " pl-10 font-mono text-theme-primary font-black text-xl"}
@@ -298,19 +315,28 @@ const ProductFormPage: React.FC<ProductFormPageProps> = ({ productId, categories
                                         <input 
                                             type="text" 
                                             name="costPrice" 
-                                            value={formatCurrencyDisplay(formData.costPrice)} 
+                                            value={formatDecimal(formData.costPrice)} 
                                             onChange={handleChange} 
                                             className={inputStyle + " pl-10 font-mono"}
                                         />
                                     </div>
                                 </div>
                             </div>
-                            <div>
-                                <label className="block text-[10px] font-black text-gray-400 uppercase ml-1 mb-1">Categoria de Inventário</label>
-                                <select name="categoryId" value={formData.categoryId || ''} onChange={handleChange} className={inputStyle}>
-                                    <option value="">Selecione...</option>
-                                    {categories.map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
-                                </select>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-[10px] font-black text-gray-400 uppercase ml-1 mb-1">Categoria de Inventário</label>
+                                    <select name="categoryId" value={formData.categoryId || ''} onChange={handleChange} className={inputStyle}>
+                                        <option value="">Selecione...</option>
+                                        {categories.map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black text-gray-400 uppercase ml-1 mb-1">Tipo de Venda</label>
+                                    <select name="unitType" value={formData.unitType || 'UN'} onChange={handleChange} className={inputStyle}>
+                                        <option value="UN">Unidade (UN)</option>
+                                        <option value="KG">Quilograma (KG)</option>
+                                    </select>
+                                </div>
                             </div>
                         </div>
                         <div className="bg-gray-50 dark:bg-gray-900/50 p-8 rounded-3xl border-2 border-dashed border-gray-200 dark:border-gray-700 flex flex-col items-center justify-center text-center">
@@ -345,7 +371,7 @@ const ProductFormPage: React.FC<ProductFormPageProps> = ({ productId, categories
                                     </div>
                                     <div className="text-right">
                                         <p className="text-[10px] font-black uppercase text-gray-500">Preço Sugerido (Soma)</p>
-                                        <p className="text-lg font-black text-theme-primary">{formatCurrencyDisplay(calculateSuggestedKitPrice())}</p>
+                                        <p className="text-lg font-black text-theme-primary">{formatCurrency(calculateSuggestedKitPrice())}</p>
                                         <button type="button" onClick={applySuggestedPrice} className="text-[10px] font-bold text-theme-primary hover:underline">Aplicar ao Preço de Venda</button>
                                     </div>
                                 </div>
@@ -353,16 +379,22 @@ const ProductFormPage: React.FC<ProductFormPageProps> = ({ productId, categories
                                 <div className="flex gap-2 items-end bg-gray-50 dark:bg-gray-900/50 p-4 rounded-2xl border border-gray-200 dark:border-gray-700">
                                     <div className="flex-1">
                                         <label className="block text-[10px] font-black text-gray-400 uppercase ml-1 mb-1">Produto</label>
-                                        <select 
-                                            value={kitItemInput.productId} 
-                                            onChange={(e) => setKitItemInput(prev => ({ ...prev, productId: e.target.value }))}
-                                            className={inputStyle}
-                                        >
-                                            <option value="">Selecione um produto...</option>
-                                            {allProducts.filter(p => p.id !== formData.id && !p.isKit).map(p => (
-                                                <option key={p.id} value={p.id}>{p.name} - {formatCurrencyDisplay(p.price)}</option>
-                                            ))}
-                                        </select>
+                                        <div className="flex gap-2">
+                                            <div className="flex-1 relative">
+                                                <input 
+                                                    type="text"
+                                                    readOnly
+                                                    placeholder="Clique para pesquisar..."
+                                                    value={allProducts.find(p => p.id === kitItemInput.productId)?.name || ''}
+                                                    onClick={() => setIsSearchModalOpen(true)}
+                                                    className={inputStyle + " cursor-pointer pr-10"}
+                                                />
+                                                <Search size={18} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                                            </div>
+                                            <Button type="button" variant="secondary" onClick={() => setIsSearchModalOpen(true)} className="rounded-xl px-4">
+                                                <Search size={18} />
+                                            </Button>
+                                        </div>
                                     </div>
                                     <div className="w-32">
                                         <label className="block text-[10px] font-black text-gray-400 uppercase ml-1 mb-1">Qtd.</label>
@@ -399,8 +431,8 @@ const ProductFormPage: React.FC<ProductFormPageProps> = ({ productId, categories
                                                         <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
                                                             <td className="px-4 py-3 font-medium">{product?.name || 'Produto não encontrado'}</td>
                                                             <td className="px-4 py-3 text-center font-mono">{item.quantity}</td>
-                                                            <td className="px-4 py-3 text-right font-mono text-gray-500">{formatCurrencyDisplay(product?.price)}</td>
-                                                            <td className="px-4 py-3 text-right font-mono font-bold">{formatCurrencyDisplay(subtotal)}</td>
+                                                            <td className="px-4 py-3 text-right font-mono text-gray-500">{formatCurrency(product?.price)}</td>
+                                                            <td className="px-4 py-3 text-right font-mono font-bold">{formatCurrency(subtotal)}</td>
                                                             <td className="px-4 py-3 text-center">
                                                                 <button type="button" onClick={() => handleRemoveKitItem(item.productId)} className="text-red-500 hover:text-red-700 p-1">
                                                                     <Trash2 size={16} />
@@ -443,7 +475,7 @@ const ProductFormPage: React.FC<ProductFormPageProps> = ({ productId, categories
                                                         <td className="px-4 py-3 text-gray-600 dark:text-gray-400">
                                                             {safeLocaleDateString(h.date)} {safeLocaleTimeString(h.date, { hour: '2-digit', minute: '2-digit' })}
                                                         </td>
-                                                        <td className="px-4 py-3 text-right font-black text-theme-primary">{formatCurrencyDisplay(h.price)}</td>
+                                                        <td className="px-4 py-3 text-right font-black text-theme-primary">{formatCurrency(h.price)}</td>
                                                     </tr>
                                                 ))
                                             )}
@@ -474,7 +506,7 @@ const ProductFormPage: React.FC<ProductFormPageProps> = ({ productId, categories
                                                         <td className="px-4 py-3 text-gray-600 dark:text-gray-400">
                                                             {safeLocaleDateString(h.date)} {safeLocaleTimeString(h.date, { hour: '2-digit', minute: '2-digit' })}
                                                         </td>
-                                                        <td className="px-4 py-3 text-right font-black text-gray-700 dark:text-gray-200">{formatCurrencyDisplay(h.price)}</td>
+                                                        <td className="px-4 py-3 text-right font-black text-gray-700 dark:text-gray-200">{formatCurrency(h.price)}</td>
                                                     </tr>
                                                 ))
                                             )}
@@ -514,7 +546,7 @@ const ProductFormPage: React.FC<ProductFormPageProps> = ({ productId, categories
                                     <input 
                                         type="text" 
                                         name="costPrice" 
-                                        value={formatCurrencyDisplay(initialLot.costPrice)} 
+                                        value={formatCurrency(initialLot.costPrice)} 
                                         onChange={handleInitialLotChange} 
                                         className={inputStyle + " pl-10 font-mono"}
                                     />
@@ -548,6 +580,13 @@ const ProductFormPage: React.FC<ProductFormPageProps> = ({ productId, categories
                     </Button>
                 </div>
             </form>
+
+            <ProductSearchModal 
+                isOpen={isSearchModalOpen}
+                onClose={() => setIsSearchModalOpen(false)}
+                onSelect={handleSelectProductForKit}
+                title="Selecionar Produto para o Kit"
+            />
         </div>
     );
 };

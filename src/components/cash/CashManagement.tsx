@@ -1,8 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { db } from '../../services/databaseService';
-import { CashSession, CashOperation } from '../../types';
+import { CashSession, CashOperation, PaymentMethod } from '../../types';
 import { safeFormat } from '../../utils/dateUtils';
+import { formatCurrency } from '../../utils/formatUtils';
 import { 
   Search, 
   Filter, 
@@ -32,6 +33,9 @@ const CashManagement: React.FC = () => {
   const [expandedSession, setExpandedSession] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'open' | 'closed'>('all');
+  
+  const [editingSession, setEditingSession] = useState<CashSession | null>(null);
+  const [editingOperation, setEditingOperation] = useState<CashOperation | null>(null);
 
   useEffect(() => {
     loadData();
@@ -78,10 +82,61 @@ const CashManagement: React.FC = () => {
       
       // Excluir a sessão
       await db.delete('cashSessions', sessionId);
+      
+      // Excluir vendas vinculadas (opcional, mas recomendado para limpeza)
+      const allSales = await db.getAll('sales');
+      const sessionSales = allSales.filter(s => s.sessionId === sessionId);
+      for (const sale of sessionSales) {
+        await db.delete('sales', sale.id);
+      }
+
       await loadData();
     } catch (error) {
       alert('Erro ao excluir sessão.');
     }
+  };
+
+  const handleUpdateSession = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingSession) return;
+    try {
+      await db.put('cashSessions', editingSession);
+      setEditingSession(null);
+      await loadData();
+    } catch (error) {
+      alert('Erro ao atualizar sessão.');
+    }
+  };
+
+  const handleUpdateOperation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingOperation) return;
+    try {
+      await db.put('cashOperations', editingOperation);
+      setEditingOperation(null);
+      await loadData();
+    } catch (error) {
+      alert('Erro ao atualizar operação.');
+    }
+  };
+
+  const calculateBalance = (session: CashSession) => {
+    if (session.finalAmount !== undefined && session.status === 'CLOSED') return session.finalAmount;
+    
+    const sessionOps = operations.filter(op => op.sessionId === session.id);
+    const opsTotal = sessionOps.reduce((acc, op) => {
+      if (op.type === 'SUPRIMENTO' || op.type === 'REFORCO' || op.type === 'VENDA') return acc + (op.amount || 0);
+      if (op.type === 'SANGRIA') return acc - (op.amount || 0);
+      return acc;
+    }, 0);
+    
+    const salesTotal = (session.sales || []).reduce((acc, sale) => {
+      // Apenas vendas em dinheiro afetam o saldo físico do caixa
+      const cashPayment = sale.payments?.find(p => p.method === PaymentMethod.DINHEIRO);
+      return acc + (cashPayment ? cashPayment.amount : 0);
+    }, 0);
+
+    return (session.initialAmount || 0) + opsTotal + salesTotal;
   };
 
   const filteredSessions = sessions.filter(session => {
@@ -181,12 +236,18 @@ const CashManagement: React.FC = () => {
                   <div className="text-right hidden sm:block">
                     <p className="text-[10px] text-gray-400 uppercase font-black tracking-widest">Saldo Atual/Final</p>
                     <p className="text-lg font-black text-theme-primary">
-                      {session.finalBalance?.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) || 
-                       (session.initialBalance + operations.filter(op => op.sessionId === session.id).reduce((acc, op) => acc + (op.type === 'IN' ? op.amount : -op.amount), 0)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      { formatCurrency(calculateBalance(session)) }
                     </p>
                   </div>
                   
                   <div className="flex items-center gap-2">
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); setEditingSession(session); }}
+                      className="p-2 text-gray-400 hover:text-theme-primary transition-colors"
+                      title="Editar Sessão"
+                    >
+                      <Edit2 size={18} />
+                    </button>
                     <button 
                       onClick={(e) => { e.stopPropagation(); handleDeleteSession(session.id); }}
                       className="p-2 text-gray-400 hover:text-red-500 transition-colors"
@@ -205,24 +266,22 @@ const CashManagement: React.FC = () => {
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                     <div className="bg-white dark:bg-gray-800 p-3 rounded-xl border border-gray-100 dark:border-gray-700">
                       <p className="text-[10px] text-gray-400 uppercase font-black tracking-widest mb-1">Fundo Inicial</p>
-                      <p className="font-bold text-gray-700 dark:text-gray-200">{session.initialBalance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                      <p className="font-bold text-gray-700 dark:text-gray-200">{formatCurrency(session.initialAmount)}</p>
                     </div>
                     <div className="bg-white dark:bg-gray-800 p-3 rounded-xl border border-gray-100 dark:border-gray-700">
                       <p className="text-[10px] text-gray-400 uppercase font-black tracking-widest mb-1">Entradas (Suprimentos)</p>
                       <p className="font-bold text-green-600">
-                        {operations
-                          .filter(op => op.sessionId === session.id && op.type === 'IN')
-                          .reduce((acc, op) => acc + op.amount, 0)
-                          .toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        {formatCurrency(operations
+                          .filter(op => op.sessionId === session.id && (op.type === 'SUPRIMENTO' || op.type === 'REFORCO' || op.type === 'VENDA'))
+                          .reduce((acc, op) => acc + (op.amount || 0), 0))}
                       </p>
                     </div>
                     <div className="bg-white dark:bg-gray-800 p-3 rounded-xl border border-gray-100 dark:border-gray-700">
                       <p className="text-[10px] text-gray-400 uppercase font-black tracking-widest mb-1">Saídas (Sangrias)</p>
                       <p className="font-bold text-red-600">
-                        {operations
-                          .filter(op => op.sessionId === session.id && op.type === 'OUT')
-                          .reduce((acc, op) => acc + op.amount, 0)
-                          .toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        {formatCurrency(operations
+                          .filter(op => op.sessionId === session.id && op.type === 'SANGRIA')
+                          .reduce((acc, op) => acc + (op.amount || 0), 0))}
                       </p>
                     </div>
                   </div>
@@ -251,19 +310,19 @@ const CashManagement: React.FC = () => {
                           ) : (
                             operations
                               .filter(op => op.sessionId === session.id)
-                              .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+                              .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
                               .map(op => (
                                 <tr key={op.id} className="group">
                                   <td className="py-3 text-gray-600 dark:text-gray-400">
-                                    {safeFormat(op.timestamp, "HH:mm:ss")}
+                                    {safeFormat(op.date, "HH:mm:ss")}
                                   </td>
                                   <td className="py-3">
                                     <span className={clsx(
                                       "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest",
-                                      op.type === 'IN' ? "bg-green-100 text-green-600" : "bg-red-100 text-red-600"
+                                      (op.type === 'SUPRIMENTO' || op.type === 'REFORCO' || op.type === 'VENDA') ? "bg-green-100 text-green-600" : "bg-red-100 text-red-600"
                                     )}>
-                                      {op.type === 'IN' ? <ArrowUpCircle size={10} /> : <ArrowDownCircle size={10} />}
-                                      {op.type === 'IN' ? 'Suprimento' : 'Sangria'}
+                                      {(op.type === 'SUPRIMENTO' || op.type === 'REFORCO' || op.type === 'VENDA') ? <ArrowUpCircle size={10} /> : <ArrowDownCircle size={10} />}
+                                      {op.type === 'SUPRIMENTO' ? 'Suprimento' : op.type === 'SANGRIA' ? 'Sangria' : op.type === 'REFORCO' ? 'Reforço' : 'Venda'}
                                     </span>
                                   </td>
                                   <td className="py-3 text-gray-700 dark:text-gray-300 font-medium">
@@ -271,12 +330,18 @@ const CashManagement: React.FC = () => {
                                   </td>
                                   <td className={clsx(
                                     "py-3 text-right font-bold",
-                                    op.type === 'IN' ? "text-green-600" : "text-red-600"
+                                    (op.type === 'SUPRIMENTO' || op.type === 'REFORCO' || op.type === 'VENDA') ? "text-green-600" : "text-red-600"
                                   )}>
-                                    {op.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                    {formatCurrency(op.amount)}
                                   </td>
                                   <td className="py-3 text-right">
                                     <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                      <button 
+                                        onClick={() => setEditingOperation(op)}
+                                        className="p-1.5 text-gray-400 hover:text-theme-primary transition-colors"
+                                      >
+                                        <Edit2 size={14} />
+                                      </button>
                                       <button 
                                         onClick={() => handleDeleteOperation(op.id)}
                                         className="p-1.5 text-gray-400 hover:text-red-500 transition-colors"
@@ -298,6 +363,90 @@ const CashManagement: React.FC = () => {
           ))
         )}
       </div>
+
+      {/* Modal Editar Sessão */}
+      {editingSession && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6 animate-in zoom-in-95 duration-200">
+            <h3 className="text-xl font-black text-gray-800 dark:text-gray-100 uppercase tracking-tight mb-6">Editar Sessão de Caixa</h3>
+            <form onSubmit={handleUpdateSession} className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Terminal / Turno</label>
+                <input 
+                  type="text" 
+                  value={editingSession.terminalId}
+                  onChange={e => setEditingSession({...editingSession, terminalId: e.target.value})}
+                  className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-900 border-none rounded-xl focus:ring-2 focus:ring-theme-primary/20"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Fundo Inicial (R$)</label>
+                <input 
+                  type="number" 
+                  step="0.01"
+                  value={editingSession.initialAmount}
+                  onChange={e => setEditingSession({...editingSession, initialAmount: parseFloat(e.target.value) || 0})}
+                  className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-900 border-none rounded-xl focus:ring-2 focus:ring-theme-primary/20"
+                  required
+                />
+              </div>
+              {editingSession.status === 'CLOSED' && (
+                <div>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Valor Final (R$)</label>
+                  <input 
+                    type="number" 
+                    step="0.01"
+                    value={editingSession.finalAmount || 0}
+                    onChange={e => setEditingSession({...editingSession, finalAmount: parseFloat(e.target.value) || 0})}
+                    className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-900 border-none rounded-xl focus:ring-2 focus:ring-theme-primary/20"
+                  />
+                </div>
+              )}
+              <div className="flex gap-3 pt-4">
+                <Button type="button" variant="secondary" className="flex-1" onClick={() => setEditingSession(null)}>Cancelar</Button>
+                <Button type="submit" variant="primary" className="flex-1">Salvar Alterações</Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Editar Operação */}
+      {editingOperation && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6 animate-in zoom-in-95 duration-200">
+            <h3 className="text-xl font-black text-gray-800 dark:text-gray-100 uppercase tracking-tight mb-6">Editar Operação de Caixa</h3>
+            <form onSubmit={handleUpdateOperation} className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Descrição</label>
+                <input 
+                  type="text" 
+                  value={editingOperation.description}
+                  onChange={e => setEditingOperation({...editingOperation, description: e.target.value})}
+                  className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-900 border-none rounded-xl focus:ring-2 focus:ring-theme-primary/20"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Valor (R$)</label>
+                <input 
+                  type="number" 
+                  step="0.01"
+                  value={editingOperation.amount}
+                  onChange={e => setEditingOperation({...editingOperation, amount: parseFloat(e.target.value) || 0})}
+                  className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-900 border-none rounded-xl focus:ring-2 focus:ring-theme-primary/20"
+                  required
+                />
+              </div>
+              <div className="flex gap-3 pt-4">
+                <Button type="button" variant="secondary" className="flex-1" onClick={() => setEditingOperation(null)}>Cancelar</Button>
+                <Button type="submit" variant="primary" className="flex-1">Salvar Alterações</Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../services/databaseService';
 import type { CashSession, CashOperation, Sale } from '../../types';
+import { formatCurrency, formatDecimal, parseCurrencyInput } from '../../utils/formatUtils';
 import { safeLocaleString, safeDate } from '../../utils/dateUtils';
 import Button from '../shared/Button';
 import { LogOut, DollarSign, ArrowRightLeft, ShoppingCart, FileText, AlertTriangle, CheckCircle2, ArrowLeft } from 'lucide-react';
@@ -50,9 +51,7 @@ const CloseCashScreen: React.FC<CloseCashScreenProps> = ({ session, onClose }) =
     fetchData();
   }, [session.id, session.openedAt]);
 
-  const formatCurrency = (val: number) => val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-
-  const totalSuprimentos = operations.filter(op => op.type === 'SUPRIMENTO').reduce((acc, op) => acc + op.amount, 0);
+  const totalSuprimentos = operations.filter(op => op.type === 'SUPRIMENTO' || op.type === 'REFORCO').reduce((acc, op) => acc + op.amount, 0);
   const totalSangrias = operations.filter(op => op.type === 'SANGRIA').reduce((acc, op) => acc + op.amount, 0);
   const totalSales = sales.reduce((acc, sale) => acc + sale.totalAmount, 0);
   
@@ -68,7 +67,7 @@ const CloseCashScreen: React.FC<CloseCashScreenProps> = ({ session, onClose }) =
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const numericAmount = parseFloat(finalAmount.replace(',', '.'));
+    const numericAmount = parseCurrencyInput(finalAmount);
     if (isNaN(numericAmount) || numericAmount < 0) {
       alert('Por favor, insira um valor de fechamento válido.');
       return;
@@ -78,7 +77,7 @@ const CloseCashScreen: React.FC<CloseCashScreenProps> = ({ session, onClose }) =
 
   if (loading) return <div className="flex items-center justify-center h-full"><p className="animate-pulse font-black uppercase text-gray-400">Processando Fechamento...</p></div>;
 
-  const difference = parseFloat(finalAmount.replace(',', '.')) - expectedAmount;
+  const difference = parseCurrencyInput(finalAmount) - expectedAmount;
 
   return (
     <div className="flex flex-col h-full bg-gray-50 dark:bg-gray-900 overflow-y-auto">
@@ -154,7 +153,7 @@ const CloseCashScreen: React.FC<CloseCashScreenProps> = ({ session, onClose }) =
                 <input
                   type="text"
                   value={finalAmount}
-                  onChange={(e) => setFinalAmount(e.target.value)}
+                  onChange={(e) => setFinalAmount(formatDecimal(parseCurrencyInput(e.target.value)))}
                   placeholder="0,00"
                   className="w-full pl-12 pr-4 py-4 bg-gray-50 dark:bg-gray-700 border-2 border-gray-100 dark:border-gray-600 rounded-2xl text-3xl font-mono font-black text-right focus:border-theme-primary focus:ring-0 transition-all"
                   autoFocus
@@ -162,12 +161,12 @@ const CloseCashScreen: React.FC<CloseCashScreenProps> = ({ session, onClose }) =
               </div>
             </div>
 
-            {finalAmount && !isNaN(parseFloat(finalAmount.replace(',', '.'))) && (
+            {finalAmount && !isNaN(parseCurrencyInput(finalAmount)) && (
               <div className={`p-4 rounded-xl flex items-center gap-4 animate-in fade-in slide-in-from-top-2 ${difference === 0 ? 'bg-emerald-100 text-emerald-700' : difference > 0 ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700'}`}>
                 {difference === 0 ? <CheckCircle2 size={24} /> : <AlertTriangle size={24} />}
                 <div>
                   <p className="text-xs font-black uppercase tracking-widest">Diferença de Caixa</p>
-                  <p className="text-xl font-black">{difference.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                  <p className="text-xl font-black">{formatCurrency(difference)}</p>
                   <p className="text-[10px] font-bold opacity-80 uppercase">{difference === 0 ? 'Caixa Conferido com Sucesso' : difference > 0 ? 'Sobra de Caixa Identificada' : 'Quebra de Caixa Identificada'}</p>
                 </div>
               </div>

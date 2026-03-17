@@ -31,10 +31,20 @@ const CategoryManagement: React.FC<CategoryManagementProps> = ({ onNewCategory, 
         }
     };
 
+    const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
     const handleDelete = async (id: string) => {
-        if (window.confirm('Tem certeza que deseja excluir esta categoria?')) {
-            await db.delete('categories', id);
-            fetchCategories();
+        if (deleteConfirmId === id) {
+            try {
+                await db.delete('categories', id);
+                setDeleteConfirmId(null);
+                fetchCategories();
+            } catch (error) {
+                console.error("Erro ao excluir categoria:", error);
+            }
+        } else {
+            setDeleteConfirmId(id);
+            setTimeout(() => setDeleteConfirmId(null), 3000);
         }
     };
 
@@ -89,8 +99,15 @@ const CategoryManagement: React.FC<CategoryManagementProps> = ({ onNewCategory, 
                                             <Button variant="ghost" size="icon" onClick={() => onEditCategory(category.id)}>
                                                 <Edit size={18} />
                                             </Button>
-                                            <Button variant="ghost" size="icon" onClick={() => handleDelete(category.id)} className="text-red-500 hover:text-red-600">
+                                            <Button 
+                                                variant="ghost" 
+                                                size="icon" 
+                                                onClick={() => handleDelete(category.id)} 
+                                                className={`transition-all ${deleteConfirmId === category.id ? 'text-white bg-red-500 hover:bg-red-600 rounded-lg px-2 w-auto' : 'text-red-500 hover:text-red-600'}`}
+                                                title={deleteConfirmId === category.id ? 'Clique novamente para confirmar' : 'Excluir categoria'}
+                                            >
                                                 <Trash2 size={18} />
+                                                {deleteConfirmId === category.id && <span className="text-[10px] font-black ml-1 uppercase">Confirmar?</span>}
                                             </Button>
                                         </div>
                                     </td>

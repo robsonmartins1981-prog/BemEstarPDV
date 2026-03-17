@@ -7,6 +7,7 @@ import type { Category } from '../../types';
 import Button from '../shared/Button';
 
 import ProductManagement from './ProductManagement';
+import Dashboard from './Dashboard';
 import CategoryManagement from './CategoryManagement';
 import NFeImport from './NFeImport';
 import InventoryReport from './InventoryReport';
@@ -18,6 +19,7 @@ import GenerateOrder from './GenerateOrder';
 import HRManagement from './HRManagement';
 import EmployeeFormPage from './EmployeeFormPage';
 import CashManagement from '../cash/CashManagement';
+import SalesReport from './SalesReport';
 import DeliveryZones from './DeliveryZones';
 import GeneralSettings from './GeneralSettings';
 import SupplierManagement from './SupplierManagement';
@@ -31,7 +33,7 @@ interface ERPScreenProps {
     setView: (view: 'pos' | 'erp' | 'crm' | 'fiscal' | 'stock') => void;
 }
 
-type ActiveModule = 'products' | 'categories' | 'customers' | 'suppliers' | 'reports' | 'nfeImport' | 'inventory' | 'generateOrder' | 'hr' | 'cashManagement' | 'deliveryZones' | 'generalSettings' | 'users' | 'accountsPayable';
+type ActiveModule = 'dashboard' | 'products' | 'categories' | 'customers' | 'suppliers' | 'reports' | 'nfeImport' | 'inventory' | 'generateOrder' | 'hr' | 'cashManagement' | 'deliveryZones' | 'generalSettings' | 'users' | 'accountsPayable' | 'salesReport';
 
 type ERPView = 
   | { type: 'module', id: ActiveModule }
@@ -48,6 +50,16 @@ interface MenuItem { id: ActiveModule; label: string; }
 interface MenuModule { id: string; label: string; icon: React.ElementType; items: MenuItem[]; color: string; adminOnly?: boolean; }
 
 const menuModules: MenuModule[] = [
+    {
+        id: 'dashboard',
+        label: 'Análise e BI',
+        icon: BarChart,
+        color: 'text-theme-primary',
+        items: [
+            { id: 'dashboard', label: 'Dashboard Financeiro' },
+            { id: 'salesReport', label: 'Relatório de Vendas' },
+        ],
+    },
     {
         id: 'operacional',
         label: 'Operações e Caixa',
@@ -98,7 +110,15 @@ const menuModules: MenuModule[] = [
         color: 'text-teal-500',
         items: [ 
             { id: 'customers', label: 'Base de Clientes' },
-            { id: 'suppliers', label: 'Fornecedores' }
+        ],
+    },
+    {
+        id: 'fornecedores',
+        label: 'Fornecedores',
+        icon: Truck,
+        color: 'text-amber-500',
+        items: [
+            { id: 'suppliers', label: 'Base de Fornecedores' },
         ],
     },
     {
@@ -114,8 +134,8 @@ const menuModules: MenuModule[] = [
 
 const ERPScreen: React.FC<ERPScreenProps> = ({ setView }) => {
     const { user: currentUser } = useAuth();
-    const [currentErpView, setCurrentErpView] = useState<ERPView>({ type: 'module', id: 'products' }); 
-    const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['operacional', 'seguranca', 'estoque']));
+    const [currentErpView, setCurrentErpView] = useState<ERPView>({ type: 'module', id: 'dashboard' }); 
+    const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['dashboard', 'operacional', 'seguranca', 'estoque']));
     const [categories, setCategories] = useState<Category[]>([]);
 
     useEffect(() => {
@@ -142,9 +162,11 @@ const ERPScreen: React.FC<ERPScreenProps> = ({ setView }) => {
             case 'account_payable_form': return <AccountPayableFormPage accountId={currentErpView.accountId} onBack={() => setCurrentErpView({ type: 'module', id: 'accountsPayable' })} />;
             case 'module':
                 switch(currentErpView.id) {
+                    case 'dashboard': return <Dashboard />;
                     case 'hr': return <HRManagement onNewEmployee={() => setCurrentErpView({ type: 'employee_form' })} onEditEmployee={(id) => setCurrentErpView({ type: 'employee_form', employeeId: id })} />;
                     case 'users': return <UserManagement onNewUser={() => setCurrentErpView({ type: 'user_form' })} onEditUser={(id) => setCurrentErpView({ type: 'user_form', userId: id })} />;
                     case 'cashManagement': return <CashManagement />;
+                    case 'salesReport': return <SalesReport />;
                     case 'deliveryZones': return <DeliveryZones />;
                     case 'generalSettings': return <GeneralSettings />;
                     case 'products': return <ProductManagement onNewProduct={() => setCurrentErpView({ type: 'product_form' })} onEditProduct={(id) => setCurrentErpView({ type: 'product_form', productId: id })} onImportXML={() => setCurrentErpView({ type: 'module', id: 'nfeImport' })} />;

@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import Modal from '../shared/Modal';
 import Button from '../shared/Button';
+import { formatDecimal, parseCurrencyInput } from '../../utils/formatUtils';
 import type { CashOperation } from '../../types';
 
 interface CashOperationsModalProps {
@@ -16,14 +17,8 @@ const CashOperationsModal: React.FC<CashOperationsModalProps> = ({ isOpen, onClo
   const [description, setDescription] = useState('');
   const [error, setError] = useState('');
 
-  const formatCurrencyInput = (value: string) => {
-    const digits = value.replace(/\D/g, '');
-    const numberValue = parseInt(digits || '0', 10) / 100;
-    return numberValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  };
-
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setAmount(formatCurrencyInput(e.target.value));
+    setAmount(formatDecimal(parseCurrencyInput(e.target.value)));
   };
 
   const handleConfirm = () => {

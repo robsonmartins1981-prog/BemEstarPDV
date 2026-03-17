@@ -24,13 +24,17 @@ export interface User {
     active: boolean;
 }
 
+export type ProductUnitType = 'UN' | 'KG';
+
 export interface Product {
   id: string; // Código Interno do Produto
   barcode?: string; // Código de Barras (EAN/GTIN)
   name: string; 
   brand?: string; 
+  sku?: string;
   price: number; 
   costPrice?: number; 
+  unitType: ProductUnitType;
   isBulk: boolean; 
   scaleCode?: string; 
   stock: number; 
@@ -83,6 +87,7 @@ export interface SaleItem {
   productImage?: string; 
   unitPrice: number; 
   quantity: number; 
+  unitType?: ProductUnitType;
   discount: number; 
   total: number; 
   lotNumber?: string; 
@@ -219,6 +224,7 @@ export interface CashSession {
   expectedAmount?: number;
   status: 'OPEN' | 'CLOSED'; 
   notes?: string;
+  sales: Sale[];
 }
 export interface Category { id: string; name: string; }
 export interface Supplier { id: string; name: string; cnpj: string; contactPerson?: string; phone?: string; email?: string; }
@@ -236,8 +242,9 @@ export interface Customer {
   creditLimit?: number; 
   observations?: string; 
 }
-export interface Expense { id: string; description: string; amount: number; supplierId?: string; categoryId?: string; dueDate: Date; paidDate?: Date; status: 'PENDING' | 'PAID'; }
-export interface InventoryLot { id: string; productId: string; supplierId?: string; quantity: number; expirationDate?: Date; entryDate: Date; costPrice: number; }
+export interface ExpenseSubItem { id: string; description: string; amount: number; categoryId?: string; }
+export interface Expense { id: string; description: string; amount: number; supplierId?: string; categoryId?: string; dueDate: Date; purchaseDate: Date; paidDate?: Date; status: 'PENDING' | 'PAID'; isFixed?: boolean; subItems?: ExpenseSubItem[]; }
+export interface InventoryLot { id: string; productId: string; supplierId?: string; lotNumber?: string; quantity: number; expirationDate?: Date; entryDate: Date; costPrice: number; }
 export interface InventoryAdjustment { id: string; productId: string; lotId: string; quantityChange: number; reason: string; date: Date; }
 export interface Promotion {
   id: string;
@@ -290,5 +297,5 @@ export interface FiscalConfig { id: 'main'; emitente: EmitenteConfig; api: ApiCo
 
 export interface SyncJob { id: string; type: string; payload: any; createdAt: Date; retryCount: number; lastAttempt?: Date; status: 'PENDING' | 'FAILED'; }
 export type NFeItemStatus = 'LINKED' | 'UNLINKED' | 'NEW';
-export interface NFeItem { code: string; name: string; ncm: string; quantity: number; unitPrice: number; totalPrice: number; status: NFeItemStatus; linkedProductDetails?: Product; expirationDate: string; conversionFactor: number; }
+export interface NFeItem { code: string; name: string; ncm: string; quantity: number; unitPrice: number; totalPrice: number; status: NFeItemStatus; linkedProductDetails?: Product; expirationDate: string; lotNumber?: string; conversionFactor: number; }
 export interface NFeData { supplier: { cnpj: string; name: string }; items: NFeItem[]; totalAmount: number; issueDate: Date; }

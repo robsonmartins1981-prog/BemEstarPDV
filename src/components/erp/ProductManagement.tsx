@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../services/databaseService';
 import type { Product } from '../../types';
+import { formatCurrency } from '../../utils/formatUtils';
 import Button from '../shared/Button';
 import { Plus, Edit, Trash2, Search, Package, AlertTriangle } from 'lucide-react';
 
@@ -32,10 +33,20 @@ const ProductManagement: React.FC<ProductManagementProps> = ({ onNewProduct, onE
         }
     };
 
+    const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
     const handleDelete = async (id: string) => {
-        if (window.confirm('Tem certeza que deseja excluir este produto?')) {
-            await db.delete('products', id);
-            fetchProducts();
+        if (deleteConfirmId === id) {
+            try {
+                await db.delete('products', id);
+                setDeleteConfirmId(null);
+                fetchProducts();
+            } catch (error) {
+                console.error("Erro ao excluir produto:", error);
+            }
+        } else {
+            setDeleteConfirmId(id);
+            setTimeout(() => setDeleteConfirmId(null), 3000);
         }
     };
 
@@ -102,13 +113,13 @@ const ProductManagement: React.FC<ProductManagementProps> = ({ onNewProduct, onE
                                     </td>
                                     <td className="px-6 py-4">
                                         <p className="font-bold text-sm text-theme-primary">
-                                            {product.price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                            {formatCurrency(product.price)}
                                         </p>
                                     </td>
                                     <td className="px-6 py-4">
                                         <div className="flex items-center gap-2">
                                             <span className={`font-bold text-sm ${product.stock <= (product.minStock || 0) ? 'text-red-500' : 'text-gray-600 dark:text-gray-300'}`}>
-                                                {product.stock} {product.unit || 'un'}
+                                                {product.stock} {product.unitType?.toLowerCase() || 'un'}
                                             </span>
                                             {product.stock <= (product.minStock || 0) && <AlertTriangle size={14} className="text-red-500" />}
                                         </div>
@@ -118,8 +129,15 @@ const ProductManagement: React.FC<ProductManagementProps> = ({ onNewProduct, onE
                                             <Button variant="ghost" size="icon" onClick={() => onEditProduct(product.id)}>
                                                 <Edit size={18} />
                                             </Button>
-                                            <Button variant="ghost" size="icon" onClick={() => handleDelete(product.id)} className="text-red-500 hover:text-red-600">
+                                            <Button 
+                                                variant="ghost" 
+                                                size="icon" 
+                                                onClick={() => handleDelete(product.id)} 
+                                                className={`transition-all ${deleteConfirmId === product.id ? 'text-white bg-red-500 hover:bg-red-600 rounded-lg px-2 w-auto' : 'text-red-500 hover:text-red-600'}`}
+                                                title={deleteConfirmId === product.id ? 'Clique novamente para confirmar' : 'Excluir produto'}
+                                            >
                                                 <Trash2 size={18} />
+                                                {deleteConfirmId === product.id && <span className="text-[10px] font-black ml-1 uppercase">Confirmar?</span>}
                                             </Button>
                                         </div>
                                     </td>

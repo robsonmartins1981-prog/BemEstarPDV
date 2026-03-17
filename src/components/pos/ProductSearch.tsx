@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../../services/databaseService';
 import type { Product } from '../../types';
+import { formatCurrency } from '../../utils/formatUtils';
 import { Search, Package, Plus } from 'lucide-react';
 
 interface ProductSearchProps {
@@ -83,7 +84,7 @@ const ProductSearch: React.FC<ProductSearchProps> = ({ onSelect }) => {
                 </div>
               </div>
               <div className="text-right">
-                <p className="text-lg font-black text-theme-primary">R$ {product.price.toFixed(2)}</p>
+                <p className="text-lg font-black text-theme-primary">{formatCurrency(product.price)}</p>
                 <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">{product.stock} em estoque</p>
               </div>
             </button>

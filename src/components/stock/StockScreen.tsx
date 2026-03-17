@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../services/databaseService';
 import type { Product, StockMovement, StockAlert } from '../../types';
+import { formatCurrency } from '../../utils/formatUtils';
 import { safeLocaleString, safeDate } from '../../utils/dateUtils';
 import Button from '../shared/Button';
 import { Package, AlertTriangle, History, ArrowUpRight, ArrowDownRight, Search, Plus } from 'lucide-react';
@@ -160,7 +161,7 @@ const StockScreen: React.FC<StockScreenProps> = ({ setView }) => {
                   <div className="flex justify-between items-center mt-4 pt-4 border-t border-gray-50 dark:border-gray-700">
                     <div className="text-xs">
                       <span className="text-gray-400">Custo: </span>
-                      <span className="font-bold text-gray-700 dark:text-gray-300">R$ {product.costPrice?.toFixed(2)}</span>
+                      <span className="font-bold text-gray-700 dark:text-gray-300">{formatCurrency(product.costPrice || 0)}</span>
                     </div>
                     <button 
                       onClick={() => { setSelectedProduct(product); setIsMovementModalOpen(true); }}

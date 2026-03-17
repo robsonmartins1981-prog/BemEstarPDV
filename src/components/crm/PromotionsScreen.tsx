@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../services/databaseService';
 import type { Promotion } from '../../types';
+import { formatCurrency } from '../../utils/formatUtils';
 import { safeDate, safeLocaleDateString } from '../../utils/dateUtils';
 import Button from '../shared/Button';
 import { Plus, Edit, Trash2, Tag, Calendar, CheckCircle, XCircle } from 'lucide-react';
@@ -22,20 +23,23 @@ const PromotionsScreen: React.FC<PromotionsScreenProps> = ({ onNewPromotion, onE
     setPromotions(data);
   };
 
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.preventDefault();
     e.stopPropagation();
     
-    try {
-      if (window.confirm('Tem certeza que deseja excluir esta promoção?')) {
-        console.log('Excluindo promoção:', id);
+    if (deleteConfirmId === id) {
+      try {
         await db.delete('promotions', id);
+        setDeleteConfirmId(null);
         await fetchPromotions();
-        console.log('Promoção excluída com sucesso');
+      } catch (error) {
+        console.error('Erro ao excluir promoção:', error);
       }
-    } catch (error) {
-      console.error('Erro ao excluir promoção:', error);
-      alert('Erro ao excluir a promoção. Verifique o console para mais detalhes.');
+    } else {
+      setDeleteConfirmId(id);
+      setTimeout(() => setDeleteConfirmId(null), 3000);
     }
   };
 
@@ -92,7 +96,7 @@ const PromotionsScreen: React.FC<PromotionsScreenProps> = ({ onNewPromotion, onE
                 <div className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
                   <span className="text-sm text-gray-600 dark:text-gray-400">Desconto</span>
                   <span className="font-bold text-theme-primary">
-                    {promo.discountType === 'PERCENTAGE' ? `${promo.discountValue}%` : `R$ ${promo.discountValue.toFixed(2)}`}
+                    {promo.discountType === 'PERCENTAGE' ? `${promo.discountValue}%` : formatCurrency(promo.discountValue)}
                   </span>
                 </div>
                 <div className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
@@ -114,8 +118,14 @@ const PromotionsScreen: React.FC<PromotionsScreenProps> = ({ onNewPromotion, onE
                 <Button variant="secondary" className="flex-1" onClick={() => onEditPromotion(promo.id)}>
                   <Edit size={16} className="mr-2" /> Editar
                 </Button>
-                <Button type="button" variant="danger" className="!p-3" onClick={(e) => handleDelete(e, promo.id)}>
-                  <Trash2 size={16} />
+                <Button 
+                  type="button" 
+                  variant={deleteConfirmId === promo.id ? 'primary' : 'danger'} 
+                  className={`!p-3 transition-all ${deleteConfirmId === promo.id ? 'bg-red-600 hover:bg-red-700' : ''}`} 
+                  onClick={(e) => handleDelete(e, promo.id)}
+                  title={deleteConfirmId === promo.id ? 'Clique novamente para confirmar' : 'Excluir promoção'}
+                >
+                  {deleteConfirmId === promo.id ? <span className="text-[10px] font-black uppercase">Confirmar?</span> : <Trash2 size={16} />}
                 </Button>
               </div>
             </div>

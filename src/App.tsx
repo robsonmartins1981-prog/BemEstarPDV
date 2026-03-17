@@ -49,7 +49,7 @@ export const CashSessionContext = React.createContext<{
 });
 
 function AppContent() {
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
   const [session, setSession] = useState<CashSession | null>(null);
   const [showCloseScreen, setShowCloseScreen] = useState<boolean>(false);
   const [dbReady, setDbReady] = useState<boolean>(false);
@@ -61,7 +61,8 @@ function AppContent() {
       try {
         await initDB(); 
         startSyncService(); 
-        const activeSession = await db.get('cashSessions', 'active');
+        const allSessions = await db.getAll('cashSessions');
+        const activeSession = allSessions.find(s => s.status === 'OPEN');
         if (activeSession) setSession(activeSession);
         setDbReady(true); 
       } catch (error: any) {
@@ -84,23 +85,12 @@ function AppContent() {
       terminalId: shiftName,
       initialAmount,
       status: 'OPEN',
+      sales: [],
     };
     
-    const openingOperation: CashOperation = {
-      id: uuidv4(),
-      sessionId: sessionId,
-      type: 'SUPRIMENTO',
-      amount: initialAmount,
-      date: new Date().toISOString(),
-      description: `Abertura de Caixa - ${shiftName}`,
-    };
-
     await db.put('cashSessions', newSession);
-    await db.put('cashOperations', openingOperation);
     
-    // Para compatibilidade com o contexto atual que espera um objeto 'active'
-    const sessionForContext = { ...newSession, id: 'active' } as any;
-    setSession(sessionForContext);
+    setSession(newSession);
   }, [user]);
 
   /**
@@ -135,7 +125,6 @@ function AppContent() {
   /**
    * Renderiza o conteúdo principal com base na view selecionada e permissões
    */
-  const { hasPermission } = useAuth();
   const renderContent = () => {
     if (!hasPermission(view)) {
         const availableModules = ['pos', 'erp', 'crm', 'fiscal', 'stock'].filter(hasPermission);

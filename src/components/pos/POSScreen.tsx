@@ -2,6 +2,7 @@
 import React, { useState, useCallback, useContext, useEffect, useMemo } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import type { SaleItem, Sale, Product, CashOperation, Payment, Customer, ParkedSale, Coupon } from '../../types';
+import { formatCurrency, formatDecimal, parseCurrencyInput } from '../../utils/formatUtils';
 import { safeDate } from '../../utils/dateUtils';
 import { db } from '../../services/databaseService';
 import { CashSessionContext } from '../../App';
@@ -17,10 +18,10 @@ import CustomerModal from './CustomerModal';
 import ParkedSalesScreen from './ParkedSalesScreen'; 
 import TodaySalesScreen from './TodaySalesScreen'; 
 import SaveOrderModal from './SaveOrderModal';
+import FiscalReceipt from './FiscalReceipt';
 import Button from '../shared/Button';
 import { LogOut, DollarSign, ArrowRightLeft, UserPlus, Save, ListOrdered, UserCircle, Edit, X, Briefcase, Tag, Percent, Ticket, XCircle, Sun, Sunset, Moon, ReceiptText, ArrowLeft, ShoppingCart } from 'lucide-react';
 
-const formatCurrency = (value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 interface POSScreenProps {
   setView: (view: 'pos' | 'erp' | 'crm' | 'fiscal') => void;
@@ -54,6 +55,8 @@ const POSScreen: React.FC<POSScreenProps> = ({ setView }) => {
   const [isCashOpsModalOpen, setCashOpsModalOpen] = useState(false);
   const [isCustomerModalOpen, setCustomerModalOpen] = useState(false);
   const [isSaveOrderModalOpen, setSaveOrderModalOpen] = useState(false);
+  const [isReceiptModalOpen, setReceiptModalOpen] = useState(false);
+  const [lastSale, setLastSale] = useState<Sale | null>(null);
 
   const [initialAmount, setInitialAmount] = useState('');
   const [selectedShift, setSelectedShift] = useState<'Caixa 01 (Manhã)' | 'Caixa 02 (Tarde)' | 'Caixa 03 (Noite)'>('Caixa 01 (Manhã)');
@@ -61,7 +64,7 @@ const POSScreen: React.FC<POSScreenProps> = ({ setView }) => {
 
   const handleSubmitOpenSession = (e: React.FormEvent) => {
     e.preventDefault();
-    const numericAmount = parseFloat(initialAmount.replace(',', '.'));
+    const numericAmount = parseCurrencyInput(initialAmount);
     if (isNaN(numericAmount) || numericAmount < 0) {
       setOpenError('Por favor, insira um valor de suprimento válido.'); return;
     }
@@ -137,12 +140,16 @@ const POSScreen: React.FC<POSScreenProps> = ({ setView }) => {
       } else {
         const newItem: SaleItem = {
           productId: product.id, productName: product.name, productImage: product.image,
-          unitPrice: promoPrice, quantity: quantity, discount: 0, total: promoPrice * quantity,
+          unitPrice: promoPrice, quantity: quantity, unitType: product.unitType, discount: 0, total: promoPrice * quantity,
         };
         return [...prevItems, newItem];
       }
     });
   }, [activePromotions]);
+
+  const handleProductSelect = useCallback((product: Product) => {
+    handleAddProduct(product, 1);
+  }, [handleAddProduct]);
 
   const handleRemoveItem = useCallback((productId: string) => setCartItems(prev => prev.filter(item => item.productId !== productId)), []);
   const handleUpdateQuantity = useCallback((productId: string, newQuantity: number) => {
@@ -221,21 +228,27 @@ const POSScreen: React.FC<POSScreenProps> = ({ setView }) => {
     setFixedDiscountInput('');
   };
 
-  const handleFinalizeSale = useCallback(async (payments: Payment[], change: number) => {
+  const handleFinalizeSale = useCallback(async (payments: Payment[], change: number, shouldPrint: boolean) => {
     if (!session) return;
     
+    if (shouldPrint) {
+      console.log('Iniciando impressão de comanda/nota fiscal...');
+      // Aqui poderia ser chamada uma função real de impressão
+    }
+
     const tx = db.transaction(['cashSessions', 'coupons', 'sales'], 'readwrite');
     const newSale: Sale = {
       id: uuidv4(), date: new Date(), items: cartItems, subtotal,
       totalDiscount: calculatedDiscount, totalAmount: total, payments, change,
       customerCPF: includeCpf ? cpf : undefined, customerId: selectedCustomer?.id,
+      sessionId: session.id,
       isSynced: false,
       couponCodeApplied: appliedCoupon?.code,
       manualDiscountType: manualDiscount.type ?? undefined,
       manualDiscountValue: manualDiscount.value || undefined,
     };
     
-    const updatedSession = { ...session, sales: [...session.sales, newSale] };
+    const updatedSession = { ...session, sales: [...(session.sales || []), newSale] };
     // Usamos put() em vez de add() para maior resiliência em falhas de transação
     await tx.objectStore('cashSessions').put(updatedSession);
     await tx.objectStore('sales').put(newSale); 
@@ -256,6 +269,11 @@ const POSScreen: React.FC<POSScreenProps> = ({ setView }) => {
 
     clearSaleState();
     setPaymentModalOpen(false);
+    
+    if (shouldPrint) {
+      setLastSale(newSale);
+      setReceiptModalOpen(true);
+    }
   }, [cartItems, session, setSession, subtotal, total, calculatedDiscount, selectedCustomer, includeCpf, cpf, appliedCoupon, manualDiscount]);
   
   const handleConfirmParkSale = async (parkedSale: ParkedSale) => {
@@ -302,7 +320,7 @@ const POSScreen: React.FC<POSScreenProps> = ({ setView }) => {
       notes: sale.notes
     };
     
-    const updatedSession = { ...session, sales: [...session.sales, newSale] };
+    const updatedSession = { ...session, sales: [...(session.sales || []), newSale] };
     await tx.objectStore('cashSessions').put(updatedSession);
     await tx.objectStore('sales').put(newSale); 
     await tx.objectStore('parkedSales').delete(sale.id);
@@ -404,7 +422,7 @@ const POSScreen: React.FC<POSScreenProps> = ({ setView }) => {
                             id="initialAmount"
                             type="text"
                             value={initialAmount}
-                            onChange={(e) => setInitialAmount(e.target.value)}
+                            onChange={(e) => setInitialAmount(formatDecimal(parseCurrencyInput(e.target.value)))}
                             placeholder="0,00"
                             className="w-full pl-10 pr-4 py-3 border-2 border-gray-200 dark:border-gray-700 rounded-xl focus:ring-theme-primary focus:border-theme-primary bg-gray-50 dark:bg-gray-700 text-2xl text-right font-mono"
                             autoFocus
@@ -427,13 +445,13 @@ const POSScreen: React.FC<POSScreenProps> = ({ setView }) => {
       case 'parked':
         return <ParkedSalesScreen onBack={() => setActiveSubView('checkout')} onLoadSale={handleLoadParkedSale} onFinalizeDelivery={handleFinalizeDelivery} />;
       case 'today':
-        return <TodaySalesScreen onBack={() => setActiveSubView('checkout')} />;
+        return <TodaySalesScreen onBack={() => setActiveSubView('checkout')} onViewReceipt={(sale) => { setLastSale(sale); setReceiptModalOpen(true); }} />;
       case 'checkout':
       default:
         return (
           <main className="flex-grow flex flex-col lg:grid lg:grid-cols-5 gap-4 p-4 overflow-y-auto lg:overflow-hidden">
             <div className="lg:col-span-3 flex flex-col gap-4 lg:overflow-hidden h-auto lg:h-full shrink-0">
-              <ProductSearch onAddProduct={handleAddProduct} activePromotions={activePromotions} />
+              <ProductSearch onSelect={handleProductSelect} />
               <div className="flex-grow bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden flex flex-col min-h-[300px]">
                 <div className="flex-grow overflow-y-auto max-h-[50vh] lg:max-h-full">
                    <Cart items={cartItems} onRemove={handleRemoveItem} onUpdateQuantity={handleUpdateQuantity} onUpdateDiscount={handleUpdateDiscount} customerName={selectedCustomer?.name} />
@@ -600,6 +618,14 @@ const POSScreen: React.FC<POSScreenProps> = ({ setView }) => {
         customer={selectedCustomer} 
         onSave={handleConfirmParkSale} 
       />
+
+      {isReceiptModalOpen && lastSale && (
+        <FiscalReceipt 
+          isOpen={isReceiptModalOpen} 
+          onClose={() => setReceiptModalOpen(false)} 
+          sale={lastSale} 
+        />
+      )}
     </div>
   );
 };

@@ -1,5 +1,6 @@
 
 import React from 'react';
+import { formatCurrency } from '../../utils/formatUtils';
 import type { SaleItem } from '../../types';
 import { Trash2, Plus, Minus, ShoppingCart } from 'lucide-react';
 
@@ -37,7 +38,7 @@ const Cart: React.FC<CartProps> = ({ items, onUpdateQuantity, onRemoveItem }) =>
               <div>
                 <h4 className="font-bold text-gray-800 dark:text-white text-sm line-clamp-1">{item.productName}</h4>
                 <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">
-                  R$ {item.unitPrice.toFixed(2)} / un
+                  {formatCurrency(item.unitPrice)} / {item.unitType?.toLowerCase() || 'un'}
                 </p>
               </div>
             </div>
@@ -45,14 +46,20 @@ const Cart: React.FC<CartProps> = ({ items, onUpdateQuantity, onRemoveItem }) =>
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2 bg-gray-100 dark:bg-gray-900 p-1 rounded-xl">
                 <button
-                  onClick={() => onUpdateQuantity(item.productId, item.quantity - 1)}
+                  onClick={() => onUpdateQuantity(item.productId, item.quantity - (item.unitType === 'KG' ? 0.1 : 1))}
                   className="p-2 hover:bg-white dark:hover:bg-gray-800 rounded-lg transition-all text-gray-500"
                 >
                   <Minus className="w-4 h-4" />
                 </button>
-                <span className="w-8 text-center font-black text-sm text-gray-800 dark:text-white">{item.quantity}</span>
+                <input
+                  type="number"
+                  step={item.unitType === 'KG' ? "0.001" : "1"}
+                  value={item.quantity}
+                  onChange={(e) => onUpdateQuantity(item.productId, parseFloat(e.target.value) || 0)}
+                  className="w-16 text-center font-black text-sm text-gray-800 dark:text-white bg-transparent border-none outline-none"
+                />
                 <button
-                  onClick={() => onUpdateQuantity(item.productId, item.quantity + 1)}
+                  onClick={() => onUpdateQuantity(item.productId, item.quantity + (item.unitType === 'KG' ? 0.1 : 1))}
                   className="p-2 hover:bg-white dark:hover:bg-gray-800 rounded-lg transition-all text-gray-500"
                 >
                   <Plus className="w-4 h-4" />
@@ -60,7 +67,7 @@ const Cart: React.FC<CartProps> = ({ items, onUpdateQuantity, onRemoveItem }) =>
               </div>
 
               <div className="text-right w-24">
-                <p className="font-black text-theme-primary text-sm">R$ {item.total.toFixed(2)}</p>
+                <p className="font-black text-theme-primary text-sm">{formatCurrency(item.total)}</p>
               </div>
 
               <button

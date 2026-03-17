@@ -1,5 +1,6 @@
 
 import React from 'react';
+import { formatCurrency } from '../../utils/formatUtils';
 import Modal from '../shared/Modal';
 import Button from '../shared/Button';
 import { Save } from 'lucide-react';
@@ -20,7 +21,7 @@ const SaveOrderModal: React.FC<SaveOrderModalProps> = ({ isOpen, onClose, onSave
         <p className="text-sm text-gray-500">Deseja salvar este pedido para finalização posterior ou entrega?</p>
         <div className="bg-gray-50 dark:bg-gray-900 p-4 rounded-2xl border border-gray-100 dark:border-gray-800">
           <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest mb-1">Total do Pedido</p>
-          <p className="text-2xl font-black text-theme-primary">R$ {total.toFixed(2)}</p>
+          <p className="text-2xl font-black text-theme-primary">{formatCurrency(total)}</p>
         </div>
         <div className="flex gap-3">
           <Button variant="secondary" className="flex-1" onClick={onClose}>Cancelar</Button>

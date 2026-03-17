@@ -31,10 +31,20 @@ const UserManagement: React.FC<UserManagementProps> = ({ onNewUser, onEditUser }
     fetchUsers();
   }, []);
 
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
   const handleDelete = async (id: string) => {
-    if (window.confirm('Tem certeza que deseja excluir este usuário?')) {
-      await db.delete('users', id);
-      fetchUsers();
+    if (deleteConfirmId === id) {
+      try {
+        await db.delete('users', id);
+        setDeleteConfirmId(null);
+        fetchUsers();
+      } catch (error) {
+        console.error('Error deleting user:', error);
+      }
+    } else {
+      setDeleteConfirmId(id);
+      setTimeout(() => setDeleteConfirmId(null), 3000);
     }
   };
 
@@ -112,10 +122,16 @@ const UserManagement: React.FC<UserManagementProps> = ({ onNewUser, onEditUser }
                       </button>
                       <button 
                         onClick={() => handleDelete(user.id)} 
-                        className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg text-red-500 transition-colors"
+                        className={`p-2 rounded-lg transition-all flex items-center gap-1 ${
+                          deleteConfirmId === user.id 
+                            ? 'bg-red-500 text-white hover:bg-red-600 px-3' 
+                            : 'hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500'
+                        }`}
                         disabled={user.username === 'admin'}
+                        title={deleteConfirmId === user.id ? 'Clique novamente para confirmar' : 'Excluir usuário'}
                       >
                         <Trash2 size={16} />
+                        {deleteConfirmId === user.id && <span className="text-[10px] font-black uppercase">Confirmar?</span>}
                       </button>
                     </div>
                   </td>
