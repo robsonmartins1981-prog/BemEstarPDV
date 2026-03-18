@@ -10,7 +10,8 @@ export async function getActivePromotions(): Promise<Promotion[]> {
         const allPromotions = await db.getAll('promotions');
         const now = new Date();
         
-        return allPromotions.filter(promo => {
+        return (allPromotions || []).filter(promo => {
+            if (!promo) return false;
             const startDate = new Date(promo.startDate);
             const endDate = new Date(promo.endDate);
             return promo.active && now >= startDate && now <= endDate;
@@ -26,11 +27,12 @@ export async function getActivePromotions(): Promise<Promotion[]> {
  * Se houver mais de uma promoção para o mesmo produto, aplica a de menor preço.
  */
 export function getPromotionalPrice(product: Product, activePromotions: Promotion[]): number {
-    let lowestPrice = product.price;
+    let lowestPrice = product.price || 0;
     let foundPromotion = false;
 
-    for (const promo of activePromotions) {
-        const promoItem = promo.items.find(item => item.productId === product.id);
+    for (const promo of (activePromotions || [])) {
+        if (!promo || !promo.items) continue;
+        const promoItem = (promo.items || []).find(item => item.productId === product.id);
         if (promoItem) {
             if (promoItem.promotionalPrice < lowestPrice) {
                 lowestPrice = promoItem.promotionalPrice;
@@ -46,5 +48,5 @@ export function getPromotionalPrice(product: Product, activePromotions: Promotio
  * Verifica se um produto está em promoção.
  */
 export function isProductOnSale(product: Product, activePromotions: Promotion[]): boolean {
-    return activePromotions.some(promo => promo.items.some(item => item.productId === product.id));
+    return (activePromotions || []).some(promo => promo && (promo.items || []).some(item => item.productId === product.id));
 }

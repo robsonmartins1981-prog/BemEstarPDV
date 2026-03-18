@@ -39,7 +39,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     
     const users = await db.getAll('users');
-    const foundUser = users.find(u => u.username === username && u.password === password);
+    const foundUser = (users || []).find(u => u.username === username && u.password === password);
     
     if (foundUser) {
       const { password: _, ...userWithoutPassword } = foundUser;

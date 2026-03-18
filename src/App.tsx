@@ -9,6 +9,7 @@ import ERPScreen from './components/erp/ERPScreen';
 import CRMScreen from './components/crm/CRMScreen';
 import FiscalScreen from './components/fiscal/FiscalScreen'; 
 import StockScreen from './components/stock/StockScreen';
+import SettingsScreen from './components/settings/SettingsScreen';
 import Sidebar from './components/shared/Sidebar';
 import LoginScreen from './components/auth/LoginScreen';
 import { startSyncService } from './services/syncService'; 
@@ -54,7 +55,7 @@ function AppContent() {
   const [showCloseScreen, setShowCloseScreen] = useState<boolean>(false);
   const [dbReady, setDbReady] = useState<boolean>(false);
   const [dbError, setDbError] = useState<string | null>(null);
-  const [view, setView] = useState<'pos' | 'erp' | 'crm' | 'fiscal' | 'stock'>('pos');
+  const [view, setView] = useState<'pos' | 'erp' | 'crm' | 'fiscal' | 'stock' | 'settings'>('pos');
 
   useEffect(() => {
     const initializeApp = async () => {
@@ -62,7 +63,7 @@ function AppContent() {
         await initDB(); 
         startSyncService(); 
         const allSessions = await db.getAll('cashSessions');
-        const activeSession = allSessions.find(s => s.status === 'OPEN');
+        const activeSession = (allSessions || []).find(s => s.status === 'OPEN');
         if (activeSession) setSession(activeSession);
         setDbReady(true); 
       } catch (error: any) {
@@ -101,7 +102,7 @@ function AppContent() {
     
     // Buscar a sessão real no banco (não a 'active' do estado)
     const allSessions = await db.getAll('cashSessions');
-    const realSession = allSessions.find(s => s.status === 'OPEN');
+    const realSession = (allSessions || []).find(s => s.status === 'OPEN');
     
     if (realSession) {
       const updatedSession: CashSession = {
@@ -126,8 +127,8 @@ function AppContent() {
    * Renderiza o conteúdo principal com base na view selecionada e permissões
    */
   const renderContent = () => {
-    if (!hasPermission(view)) {
-        const availableModules = ['pos', 'erp', 'crm', 'fiscal', 'stock'].filter(hasPermission);
+    if (!hasPermission(view === 'settings' ? 'erp' : view)) {
+        const availableModules = ['pos', 'erp', 'crm', 'fiscal', 'stock', 'settings'].filter(hasPermission);
         if (availableModules.length > 0) {
             setView(availableModules[0] as any);
             return null;
@@ -139,6 +140,7 @@ function AppContent() {
       case 'crm': return <CRMScreen setView={setView} />;
       case 'fiscal': return <FiscalScreen setView={setView} />;
       case 'stock': return <StockScreen setView={setView} />;
+      case 'settings': return <div className="p-8 max-w-6xl mx-auto w-full"><SettingsScreen /></div>;
       case 'pos':
       default: return <POSScreen setView={setView} />;
     }

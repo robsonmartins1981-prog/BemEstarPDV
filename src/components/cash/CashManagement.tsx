@@ -123,7 +123,7 @@ const CashManagement: React.FC = () => {
   const calculateBalance = (session: CashSession) => {
     if (session.finalAmount !== undefined && session.status === 'CLOSED') return session.finalAmount;
     
-    const sessionOps = operations.filter(op => op.sessionId === session.id);
+    const sessionOps = (operations || []).filter(op => op.sessionId === session.id);
     const opsTotal = sessionOps.reduce((acc, op) => {
       if (op.type === 'SUPRIMENTO' || op.type === 'REFORCO' || op.type === 'VENDA') return acc + (op.amount || 0);
       if (op.type === 'SANGRIA') return acc - (op.amount || 0);
@@ -132,11 +132,54 @@ const CashManagement: React.FC = () => {
     
     const salesTotal = (session.sales || []).reduce((acc, sale) => {
       // Apenas vendas em dinheiro afetam o saldo físico do caixa
-      const cashPayment = sale.payments?.find(p => p.method === PaymentMethod.DINHEIRO);
-      return acc + (cashPayment ? cashPayment.amount : 0);
+      const cashPayments = (sale.payments || []).filter(p => p.method === PaymentMethod.DINHEIRO);
+      const cashTotal = cashPayments.reduce((sum, p) => sum + p.amount, 0);
+      return acc + cashTotal;
     }, 0);
 
     return (session.initialAmount || 0) + opsTotal + salesTotal;
+  };
+
+  const getSessionTotals = (session: CashSession) => {
+    const totals = {
+      [PaymentMethod.DINHEIRO]: 0,
+      [PaymentMethod.PIX]: 0,
+      [PaymentMethod.CREDITO]: 0,
+      [PaymentMethod.DEBITO]: 0,
+      [PaymentMethod.NOTINHA]: 0,
+      revenue: 0,
+      sales: 0
+    };
+
+    // Vendas registradas no PDV
+    (session.sales || []).forEach(sale => {
+      totals.sales += sale.totalAmount;
+      (sale.payments || []).forEach(p => {
+        if (totals[p.method] !== undefined) {
+          totals[p.method] += p.amount;
+        }
+        // Notinha não entra no faturamento (revenue) até ser paga
+        if (p.method !== PaymentMethod.NOTINHA) {
+          totals.revenue += p.amount;
+        }
+      });
+    });
+
+    // Operações manuais do tipo VENDA (ex: recebimento de notinhas)
+    const sessionOps = (operations || []).filter(op => op.sessionId === session.id);
+    sessionOps.forEach(op => {
+      if (op.type === 'VENDA') {
+        const method = op.paymentMethod || PaymentMethod.DINHEIRO;
+        if (totals[method] !== undefined) {
+          totals[method] += op.amount;
+        }
+        totals.revenue += op.amount;
+        // Não somamos em 'sales' porque 'sales' representa o faturamento bruto de produtos vendidos no momento
+        // Mas o recebimento de dívida é faturamento líquido (revenue)
+      }
+    });
+
+    return totals;
   };
 
   const filteredSessions = sessions.filter(session => {
@@ -269,21 +312,28 @@ const CashManagement: React.FC = () => {
                       <p className="font-bold text-gray-700 dark:text-gray-200">{formatCurrency(session.initialAmount)}</p>
                     </div>
                     <div className="bg-white dark:bg-gray-800 p-3 rounded-xl border border-gray-100 dark:border-gray-700">
-                      <p className="text-[10px] text-gray-400 uppercase font-black tracking-widest mb-1">Entradas (Suprimentos)</p>
+                      <p className="text-[10px] text-gray-400 uppercase font-black tracking-widest mb-1">Faturamento (Líquido)</p>
                       <p className="font-bold text-green-600">
-                        {formatCurrency(operations
-                          .filter(op => op.sessionId === session.id && (op.type === 'SUPRIMENTO' || op.type === 'REFORCO' || op.type === 'VENDA'))
-                          .reduce((acc, op) => acc + (op.amount || 0), 0))}
+                        {formatCurrency(getSessionTotals(session).revenue)}
                       </p>
+                      <p className="text-[8px] text-gray-400 uppercase font-bold tracking-widest">Exclui Notinhas</p>
                     </div>
                     <div className="bg-white dark:bg-gray-800 p-3 rounded-xl border border-gray-100 dark:border-gray-700">
-                      <p className="text-[10px] text-gray-400 uppercase font-black tracking-widest mb-1">Saídas (Sangrias)</p>
-                      <p className="font-bold text-red-600">
-                        {formatCurrency(operations
-                          .filter(op => op.sessionId === session.id && op.type === 'SANGRIA')
-                          .reduce((acc, op) => acc + (op.amount || 0), 0))}
+                      <p className="text-[10px] text-gray-400 uppercase font-black tracking-widest mb-1">Total em Vendas</p>
+                      <p className="font-bold text-theme-primary">
+                        {formatCurrency(getSessionTotals(session).sales)}
                       </p>
+                      <p className="text-[8px] text-gray-400 uppercase font-bold tracking-widest">Inclui Notinhas</p>
                     </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+                    {Object.entries(getSessionTotals(session)).filter(([key]) => Object.values(PaymentMethod).includes(key as any)).map(([method, amount]) => (
+                      <div key={method} className="bg-white dark:bg-gray-800 p-2 rounded-xl border border-gray-100 dark:border-gray-700 text-center">
+                        <p className="text-[8px] text-gray-400 uppercase font-black tracking-widest mb-1">{method}</p>
+                        <p className="text-xs font-bold text-gray-700 dark:text-gray-200">{formatCurrency(amount as number)}</p>
+                      </div>
+                    ))}
                   </div>
 
                   <div className="space-y-2">

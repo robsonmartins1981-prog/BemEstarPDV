@@ -7,11 +7,13 @@ import { Trash2, Plus, Minus, ShoppingCart } from 'lucide-react';
 interface CartProps {
   items: SaleItem[];
   onUpdateQuantity: (productId: string, quantity: number) => void;
-  onRemoveItem: (productId: string) => void;
+  onRemove: (productId: string) => void;
+  onUpdateDiscount?: (productId: string, discount: number) => void;
+  customerName?: string;
 }
 
-const Cart: React.FC<CartProps> = ({ items, onUpdateQuantity, onRemoveItem }) => {
-  if (items.length === 0) {
+const Cart: React.FC<CartProps> = ({ items, onUpdateQuantity, onRemove, onUpdateDiscount, customerName }) => {
+  if (!items || items.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-gray-400 p-8">
         <div className="bg-gray-100 dark:bg-gray-800 p-6 rounded-full mb-4 opacity-50">
@@ -26,7 +28,7 @@ const Cart: React.FC<CartProps> = ({ items, onUpdateQuantity, onRemoveItem }) =>
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <div className="flex-1 overflow-y-auto space-y-3 p-4">
-        {items.map((item) => (
+        {items.map((item) => item && (
           <div
             key={item.productId}
             className="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 flex items-center justify-between group"
@@ -71,7 +73,7 @@ const Cart: React.FC<CartProps> = ({ items, onUpdateQuantity, onRemoveItem }) =>
               </div>
 
               <button
-                onClick={() => onRemoveItem(item.productId)}
+                onClick={() => onRemove(item.productId)}
                 className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all opacity-0 group-hover:opacity-100"
               >
                 <Trash2 className="w-4 h-4" />

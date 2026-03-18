@@ -17,25 +17,41 @@ const ProductSearch: React.FC<ProductSearchProps> = ({ onSelect }) => {
 
   useEffect(() => {
     const search = async () => {
-      if (searchTerm.trim().length === 0) {
-        setResults([]);
-        return;
+      try {
+        if (searchTerm.trim().length === 0) {
+          setResults([]);
+          return;
+        }
+        
+        const allProducts = await db.getAll('products');
+        const filtered = (allProducts || []).filter(p => 
+          p && (
+            (p.name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) || 
+            (p.barcode || '').includes(searchTerm) ||
+            (p.id || '').includes(searchTerm)
+          )
+        ).slice(0, 10);
+        
+        setResults(filtered);
+        setSelectedIndex(0);
+
+        // Auto-add if exact barcode match
+        const config = await db.get('appConfig', 'main');
+        if (config?.autoAddOnBarcodeMatch) {
+          const exactMatch = filtered.find(p => p.barcode === searchTerm.trim());
+          if (exactMatch) {
+            onSelect(exactMatch);
+            setSearchTerm('');
+          }
+        }
+      } catch (error) {
+        console.error('Erro na busca de produtos:', error);
       }
-      
-      const allProducts = await db.getAll('products');
-      const filtered = allProducts.filter(p => 
-        (p.name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) || 
-        (p.barcode || '').includes(searchTerm) ||
-        (p.id || '').includes(searchTerm)
-      ).slice(0, 10);
-      
-      setResults(filtered);
-      setSelectedIndex(0);
     };
     
     const timeout = setTimeout(search, 150);
     return () => clearTimeout(timeout);
-  }, [searchTerm]);
+  }, [searchTerm, onSelect]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown') {

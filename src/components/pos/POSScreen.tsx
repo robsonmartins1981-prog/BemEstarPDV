@@ -5,6 +5,7 @@ import type { SaleItem, Sale, Product, CashOperation, Payment, Customer, ParkedS
 import { formatCurrency, formatDecimal, parseCurrencyInput } from '../../utils/formatUtils';
 import { safeDate } from '../../utils/dateUtils';
 import { db } from '../../services/databaseService';
+import { sqliteStore } from '../../services/sqliteService';
 import { CashSessionContext } from '../../App';
 import { addToQueue } from '../../services/syncService'; 
 import { getActivePromotions, getPromotionalPrice } from '../../utils/promotionUtils';
@@ -12,7 +13,7 @@ import type { Promotion } from '../../types';
 
 import ProductSearch from './ProductSearch';
 import Cart from './Cart';
-import PaymentModal from './PaymentModal';
+import PaymentView from './PaymentView';
 import CashOperationsModal from '../cash/CashOperationsModal';
 import CustomerModal from './CustomerModal';
 import ParkedSalesScreen from './ParkedSalesScreen'; 
@@ -20,7 +21,8 @@ import TodaySalesScreen from './TodaySalesScreen';
 import SaveOrderModal from './SaveOrderModal';
 import FiscalReceipt from './FiscalReceipt';
 import Button from '../shared/Button';
-import { LogOut, DollarSign, ArrowRightLeft, UserPlus, Save, ListOrdered, UserCircle, Edit, X, Briefcase, Tag, Percent, Ticket, XCircle, Sun, Sunset, Moon, ReceiptText, ArrowLeft, ShoppingCart } from 'lucide-react';
+import { LogOut, DollarSign, ArrowRightLeft, UserPlus, Save, ListOrdered, UserCircle, Edit, X, Briefcase, Tag, Percent, Ticket, XCircle, Sun, Sunset, Moon, ReceiptText, ArrowLeft, ShoppingCart, Settings } from 'lucide-react';
+import type { Shortcut, AppConfig } from '../../types';
 
 
 interface POSScreenProps {
@@ -51,12 +53,25 @@ const POSScreen: React.FC<POSScreenProps> = ({ setView }) => {
   const [percentageDiscountInput, setPercentageDiscountInput] = useState('');
   const [fixedDiscountInput, setFixedDiscountInput] = useState('');
   
-  const [isPaymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [isPaymentView, setIsPaymentView] = useState(false);
   const [isCashOpsModalOpen, setCashOpsModalOpen] = useState(false);
   const [isCustomerModalOpen, setCustomerModalOpen] = useState(false);
   const [isSaveOrderModalOpen, setSaveOrderModalOpen] = useState(false);
   const [isReceiptModalOpen, setReceiptModalOpen] = useState(false);
   const [lastSale, setLastSale] = useState<Sale | null>(null);
+
+  const [shortcuts, setShortcuts] = useState<Shortcut[]>([]);
+  const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
+
+  useEffect(() => {
+    const loadConfig = async () => {
+      const config = await db.get('appConfig', 'main');
+      const scs = await db.getAll('shortcuts');
+      setAppConfig(config || null);
+      setShortcuts(scs);
+    };
+    loadConfig();
+  }, []);
 
   const [initialAmount, setInitialAmount] = useState('');
   const [selectedShift, setSelectedShift] = useState<'Caixa 01 (Manhã)' | 'Caixa 02 (Tarde)' | 'Caixa 03 (Noite)'>('Caixa 01 (Manhã)');
@@ -129,20 +144,22 @@ const POSScreen: React.FC<POSScreenProps> = ({ setView }) => {
   };
   
   const handleAddProduct = useCallback((product: Product, quantity: number) => {
+    if (!product || !product.id) return;
     const promoPrice = getPromotionalPrice(product, activePromotions);
     
     setCartItems(prevItems => {
-      const existingItem = prevItems.find(item => item.productId === product.id);
+      const items = (prevItems || []).filter(Boolean);
+      const existingItem = items.find(item => item.productId === product.id);
       if (existingItem) {
-        return prevItems.map(item =>
+        return items.map(item =>
           item.productId === product.id ? { ...item, quantity: item.quantity + quantity, total: (item.quantity + quantity) * promoPrice - item.discount } : item
         );
       } else {
         const newItem: SaleItem = {
           productId: product.id, productName: product.name, productImage: product.image,
-          unitPrice: promoPrice, quantity: quantity, unitType: product.unitType, discount: 0, total: promoPrice * quantity,
+          unitPrice: promoPrice, quantity: quantity, unitType: product.unitType || 'UN', discount: 0, total: promoPrice * quantity,
         };
-        return [...prevItems, newItem];
+        return [...items, newItem];
       }
     });
   }, [activePromotions]);
@@ -151,12 +168,12 @@ const POSScreen: React.FC<POSScreenProps> = ({ setView }) => {
     handleAddProduct(product, 1);
   }, [handleAddProduct]);
 
-  const handleRemoveItem = useCallback((productId: string) => setCartItems(prev => prev.filter(item => item.productId !== productId)), []);
+  const handleRemoveItem = useCallback((productId: string) => setCartItems(prev => (prev || []).filter(item => item && item.productId !== productId)), []);
   const handleUpdateQuantity = useCallback((productId: string, newQuantity: number) => {
-    setCartItems(prev => prev.map(item => item.productId === productId ? { ...item, quantity: newQuantity, total: newQuantity * item.unitPrice - item.discount } : item));
+    setCartItems(prev => (prev || []).filter(Boolean).map(item => item.productId === productId ? { ...item, quantity: newQuantity, total: newQuantity * item.unitPrice - item.discount } : item));
   }, []);
   const handleUpdateDiscount = useCallback((productId: string, newDiscount: number) => { 
-    setCartItems(prev => prev.map(item => item.productId === productId ? { ...item, discount: newDiscount, total: item.quantity * item.unitPrice - newDiscount } : item));
+    setCartItems(prev => (prev || []).filter(Boolean).map(item => item.productId === productId ? { ...item, discount: newDiscount, total: item.quantity * item.unitPrice - newDiscount } : item));
   }, []);
 
   const handleApplyCoupon = async () => {
@@ -253,6 +270,13 @@ const POSScreen: React.FC<POSScreenProps> = ({ setView }) => {
     await tx.objectStore('cashSessions').put(updatedSession);
     await tx.objectStore('sales').put(newSale); 
     
+    // Salva no SQLite em paralelo (se disponível)
+    try {
+      await sqliteStore.saveSale(newSale);
+    } catch (e) {
+      console.error('[SQLite] Erro ao salvar venda:', e);
+    }
+    
     if (appliedCoupon) {
       const couponStore = tx.objectStore('coupons');
       const couponToUpdate = await couponStore.get(appliedCoupon.id);
@@ -268,7 +292,7 @@ const POSScreen: React.FC<POSScreenProps> = ({ setView }) => {
     addToQueue('FISCAL_EMISSION', { saleId: newSale.id });
 
     clearSaleState();
-    setPaymentModalOpen(false);
+    setIsPaymentView(false);
     
     if (shouldPrint) {
       setLastSale(newSale);
@@ -325,6 +349,13 @@ const POSScreen: React.FC<POSScreenProps> = ({ setView }) => {
     await tx.objectStore('sales').put(newSale); 
     await tx.objectStore('parkedSales').delete(sale.id);
     
+    // Salva no SQLite em paralelo (se disponível)
+    try {
+      await sqliteStore.saveSale(newSale);
+    } catch (e) {
+      console.error('[SQLite] Erro ao salvar venda de entrega:', e);
+    }
+    
     await tx.done;
     setSession(updatedSession);
     
@@ -336,7 +367,7 @@ const POSScreen: React.FC<POSScreenProps> = ({ setView }) => {
     
     // Buscar a sessão real no banco
     const allSessions = await db.getAll('cashSessions');
-    const realSession = allSessions.find(s => s.status === 'OPEN');
+    const realSession = (allSessions || []).find(s => s.status === 'OPEN');
     
     if (!realSession) return;
 
@@ -361,11 +392,66 @@ const POSScreen: React.FC<POSScreenProps> = ({ setView }) => {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'F12' && cartItems.length > 0 && activeSubView === 'checkout') { event.preventDefault(); setPaymentModalOpen(true); }
+      // Global Shortcuts
+      const shortcut = (shortcuts || []).find(s => s.key === event.key);
+      if (shortcut) {
+        event.preventDefault();
+        switch (shortcut.action) {
+          case 'FINALIZE_SALE':
+            if (cartItems.length > 0 && activeSubView === 'checkout') setIsPaymentView(true);
+            break;
+          case 'OPEN_CUSTOMER_MODAL':
+            setCustomerModalOpen(true);
+            break;
+          case 'OPEN_PRODUCT_SEARCH':
+            // Focus product search - we might need a ref for this
+            const searchInput = document.querySelector('input[placeholder*="Pesquisar"]') as HTMLInputElement;
+            if (searchInput) searchInput.focus();
+            break;
+          case 'PARK_SALE':
+            if (cartItems.length > 0) setSaveOrderModalOpen(true);
+            break;
+          case 'OPEN_CASH_OPS':
+            setCashOpsModalOpen(true);
+            break;
+          case 'CLEAR_CART':
+            if (window.confirm('Limpar carrinho?')) clearSaleState();
+            break;
+          case 'OPEN_SETTINGS':
+            setView('settings');
+            break;
+          case 'LOGOUT':
+            setShowCloseScreen(true);
+            break;
+        }
+        return;
+      }
+
+      // Enter Key Navigation
+      if (event.key === 'Enter') {
+        const target = event.target as HTMLElement;
+        if (target.tagName === 'INPUT' || target.tagName === 'SELECT') {
+          // Don't advance if it's a textarea or if we are in a search result selection
+          if (target.tagName === 'INPUT' && (target as HTMLInputElement).type === 'submit') return;
+          
+          const form = target.closest('form') || document.body;
+          const focusable = Array.from(form.querySelectorAll('input, select, button, [tabindex]:not([tabindex="-1"])'))
+            .filter(el => {
+              const style = window.getComputedStyle(el);
+              return !el.hasAttribute('disabled') && style.display !== 'none' && style.visibility !== 'hidden';
+            }) as HTMLElement[];
+          
+          const index = focusable.indexOf(target);
+          if (index > -1 && index < focusable.length - 1) {
+            event.preventDefault();
+            focusable[index + 1].focus();
+          }
+        }
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [cartItems.length, activeSubView]);
+  }, [cartItems.length, activeSubView, shortcuts, setView, setShowCloseScreen]);
   
   const isPayButtonDisabled = cartItems.length === 0 || (includeCpf && (!!cpfError || !cpf));
 
@@ -448,6 +534,66 @@ const POSScreen: React.FC<POSScreenProps> = ({ setView }) => {
         return <TodaySalesScreen onBack={() => setActiveSubView('checkout')} onViewReceipt={(sale) => { setLastSale(sale); setReceiptModalOpen(true); }} />;
       case 'checkout':
       default:
+        if (isPaymentView) {
+          return (
+            <main className="flex-grow flex flex-col lg:grid lg:grid-cols-5 gap-4 p-4 overflow-y-auto lg:overflow-hidden">
+              <div className="lg:col-span-3 flex flex-col gap-4 lg:overflow-hidden h-auto lg:h-full shrink-0">
+                <PaymentView 
+                  totalAmount={total}
+                  selectedCustomer={selectedCustomer}
+                  onCancel={() => setIsPaymentView(false)}
+                  onFinalize={handleFinalizeSale}
+                />
+              </div>
+              
+              <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-lg shadow p-4 md:p-6 flex flex-col h-auto shrink-0 mb-8 lg:mb-0">
+                <div className="flex-grow space-y-4">
+                  <div className="flex justify-between items-center pb-4 border-b dark:border-gray-700">
+                    <h2 className="text-lg font-black uppercase tracking-tight text-gray-800 dark:text-white">Resumo da Venda</h2>
+                    <div className="p-2 bg-theme-primary/10 text-theme-primary rounded-lg">
+                      <ShoppingCart size={20} />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm font-bold text-gray-500 uppercase">
+                      <span>Subtotal</span>
+                      <span>{formatCurrency(subtotal)}</span>
+                    </div>
+                    {calculatedDiscount > 0 && (
+                      <div className="flex justify-between text-sm font-bold text-red-500 uppercase">
+                        <span>Descontos Totais</span>
+                        <span>-{formatCurrency(calculatedDiscount)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between items-center pt-4 border-t-2 border-dashed dark:border-gray-700">
+                      <span className="text-xl font-black uppercase text-gray-800 dark:text-white">Total</span>
+                      <span className="text-4xl font-black text-theme-primary">{formatCurrency(total)}</span>
+                    </div>
+                  </div>
+
+                  <div className="p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 space-y-3">
+                    <div className="flex items-center gap-2 text-xs font-black uppercase text-gray-400 tracking-widest">
+                      <UserCircle size={14} />
+                      <span>Cliente Selecionado</span>
+                    </div>
+                    {selectedCustomer ? (
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold text-gray-800 dark:text-white">{selectedCustomer.name}</span>
+                        <button onClick={() => setSelectedCustomer(null)} className="text-red-500 hover:text-red-600">
+                          <X size={16} />
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-gray-500 italic">Venda para consumidor final</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </main>
+          );
+        }
+
         return (
           <main className="flex-grow flex flex-col lg:grid lg:grid-cols-5 gap-4 p-4 overflow-y-auto lg:overflow-hidden">
             <div className="lg:col-span-3 flex flex-col gap-4 lg:overflow-hidden h-auto lg:h-full shrink-0">
@@ -542,9 +688,9 @@ const POSScreen: React.FC<POSScreenProps> = ({ setView }) => {
                         <UserPlus className="w-4 h-4 mr-1"/> Cliente
                     </Button>
                 </div>
-                <Button variant="success" className="w-full text-lg py-3" onClick={() => setPaymentModalOpen(true)} disabled={isPayButtonDisabled}>
-                    <DollarSign className="w-6 h-6 mr-2"/> PAGAR (F12)
-                </Button>
+            <Button variant="success" className="w-full text-lg py-3" onClick={() => setIsPaymentView(true)} disabled={isPayButtonDisabled}>
+                <DollarSign className="w-6 h-6 mr-2"/> PAGAR ({(shortcuts || []).find(s => s.action === 'FINALIZE_SALE')?.key || 'F12'})
+            </Button>
               </div>
 
             </div>
@@ -607,7 +753,6 @@ const POSScreen: React.FC<POSScreenProps> = ({ setView }) => {
       </div>
 
       {/* Modais de Operação Curta */}
-      <PaymentModal isOpen={isPaymentModalOpen} onClose={() => setPaymentModalOpen(false)} totalAmount={total} onFinalize={handleFinalizeSale} />
       <CashOperationsModal isOpen={isCashOpsModalOpen} onClose={() => setCashOpsModalOpen(false)} onConfirm={handleCashOperation} />
       <CustomerModal isOpen={isCustomerModalOpen} onClose={() => setCustomerModalOpen(false)} onSelectCustomer={handleSelectCustomer} />
       <SaveOrderModal 

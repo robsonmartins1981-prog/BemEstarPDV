@@ -22,6 +22,7 @@ import CashManagement from '../cash/CashManagement';
 import SalesReport from './SalesReport';
 import DeliveryZones from './DeliveryZones';
 import GeneralSettings from './GeneralSettings';
+import SettingsScreen from '../settings/SettingsScreen';
 import SupplierManagement from './SupplierManagement';
 import SupplierFormPage from './SupplierFormPage';
 import AccountsPayableManagement from './AccountsPayableManagement';
@@ -33,7 +34,7 @@ interface ERPScreenProps {
     setView: (view: 'pos' | 'erp' | 'crm' | 'fiscal' | 'stock') => void;
 }
 
-type ActiveModule = 'dashboard' | 'products' | 'categories' | 'customers' | 'suppliers' | 'reports' | 'nfeImport' | 'inventory' | 'generateOrder' | 'hr' | 'cashManagement' | 'deliveryZones' | 'generalSettings' | 'users' | 'accountsPayable' | 'salesReport';
+type ActiveModule = 'dashboard' | 'products' | 'categories' | 'customers' | 'suppliers' | 'reports' | 'nfeImport' | 'inventory' | 'generateOrder' | 'hr' | 'cashManagement' | 'deliveryZones' | 'generalSettings' | 'users' | 'accountsPayable' | 'salesReport' | 'systemConfig';
 
 type ERPView = 
   | { type: 'module', id: ActiveModule }
@@ -78,7 +79,7 @@ const menuModules: MenuModule[] = [
         adminOnly: true,
         items: [
             { id: 'users', label: 'Usuários e Permissões' },
-            { id: 'generalSettings', label: 'Backup e WhatsApp' },
+            { id: 'systemConfig', label: 'Atalhos e Configurações' },
         ],
     },
     {
@@ -169,6 +170,7 @@ const ERPScreen: React.FC<ERPScreenProps> = ({ setView }) => {
                     case 'salesReport': return <SalesReport />;
                     case 'deliveryZones': return <DeliveryZones />;
                     case 'generalSettings': return <GeneralSettings />;
+                    case 'systemConfig': return <SettingsScreen />;
                     case 'products': return <ProductManagement onNewProduct={() => setCurrentErpView({ type: 'product_form' })} onEditProduct={(id) => setCurrentErpView({ type: 'product_form', productId: id })} onImportXML={() => setCurrentErpView({ type: 'module', id: 'nfeImport' })} />;
                     case 'categories': return <CategoryManagement onNewCategory={() => setCurrentErpView({ type: 'category_form' })} onEditCategory={(id) => setCurrentErpView({ type: 'category_form', categoryId: id })} />;
                     case 'customers': return <CustomerManagement onNewCustomer={() => setCurrentErpView({ type: 'customer_form' })} onEditCustomer={(id) => setCurrentErpView({ type: 'customer_form', customerId: id })} />;

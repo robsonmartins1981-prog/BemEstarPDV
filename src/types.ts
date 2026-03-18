@@ -49,6 +49,13 @@ export interface Product {
   isKit?: boolean;
   kitItems?: { productId: string; quantity: number }[];
   
+  // Mix Personalizado (Feature 5)
+  isMix?: boolean;
+  mixComponents?: { productId: string; percentage: number }[]; // Porcentagem de cada item no mix
+  
+  // Controle de Quebra/Perda (Feature 1)
+  naturalLossRate?: number; // Taxa de perda natural (ex: 0.02 para 2%)
+  
   // Histórico de Preços
   purchasePriceHistory?: { date: Date; price: number }[]; // Histórico de preço de compra
   salePriceHistory?: { date: Date; price: number }[];     // Histórico de preço de venda
@@ -92,12 +99,34 @@ export interface SaleItem {
   total: number; 
   lotNumber?: string; 
   expirationDate?: Date; 
+  
+  // Mix Personalizado
+  isMix?: boolean;
+  components?: { productId: string; quantity: number; unitPrice: number }[]; // Detalhamento para baixa no estoque
+}
+
+export interface Shortcut {
+  id: string;
+  key: string; // e.g., 'F1', 'F2', 'Enter'
+  action: string; // e.g., 'FINALIZE_SALE', 'OPEN_CUSTOMER_MODAL', 'CLEAR_CART'
+  label: string;
+}
+
+export interface AppConfig {
+  id: 'main';
+  companyName: string;
+  whatsappNumber?: string;
+  autoAddOnBarcodeMatch: boolean;
+  defaultPrintReceipt: boolean;
+  theme: 'light' | 'dark' | 'system';
 }
 
 export interface Payment {
   method: PaymentMethod; 
   amount: number; 
   customerId?: string; 
+  settled?: boolean;
+  settledAt?: string;
 }
 
 export interface Sale {
@@ -242,6 +271,10 @@ export interface Customer {
   creditLimit?: number; 
   observations?: string; 
   tags?: string[];
+  
+  // CRM Re-purchase (Feature 4)
+  repurchaseCycle?: number; // Ciclo de recompra em dias (ex: 30)
+  lastPurchaseDate?: Date;
 }
 export interface ExpenseSubItem { id: string; description: string; amount: number; categoryId?: string; }
 export interface Expense { id: string; description: string; amount: number; supplierId?: string; categoryId?: string; dueDate: Date; purchaseDate: Date; paidDate?: Date; status: 'PENDING' | 'PAID'; isFixed?: boolean; subItems?: ExpenseSubItem[]; }

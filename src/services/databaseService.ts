@@ -1,7 +1,7 @@
 
 // services/databaseService.ts
 import { openDB, type IDBPDatabase, type DBSchema } from 'idb';
-import type { Product, Sale, CashSession, CashOperation, Supplier, Customer, Expense, Segment, Campaign, AutomationRule, InventoryLot, InventoryAdjustment, ParkedSale, Category, Coupon, FiscalConfig, SyncJob, Employee, AuditLog, DeliveryZone, StoreSettings, User, Promotion, StockMovement, StockAlert } from '../types';
+import type { Product, Sale, CashSession, CashOperation, Supplier, Customer, Expense, Segment, Campaign, AutomationRule, InventoryLot, InventoryAdjustment, ParkedSale, Category, Coupon, FiscalConfig, SyncJob, Employee, AuditLog, DeliveryZone, StoreSettings, User, Promotion, StockMovement, StockAlert, Shortcut, AppConfig } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 
 interface AppDB extends DBSchema {
@@ -30,6 +30,8 @@ interface AppDB extends DBSchema {
   deliveryZones: { key: string; value: DeliveryZone; indexes: { neighborhood: string }; };
   storeSettings: { key: string; value: StoreSettings; };
   users: { key: string; value: User; indexes: { username: string }; };
+  shortcuts: { key: string; value: Shortcut; indexes: { key: string }; };
+  appConfig: { key: string; value: AppConfig; };
 }
 
 let db: IDBPDatabase<AppDB>;
@@ -40,7 +42,7 @@ let db: IDBPDatabase<AppDB>;
 export async function initDB() {
   if (db) return; 
 
-  db = await openDB<AppDB>('BemEstarPDV', 26, {
+  db = await openDB<AppDB>('BemEstarPDV', 27, {
     upgrade(database, oldVersion, newVersion, transaction) {
       const stores = [
         { name: 'products', indexes: ['name', 'scaleCode', 'categoryId', 'supplierId'] },
@@ -67,7 +69,9 @@ export async function initDB() {
         { name: 'auditLogs', indexes: ['timestamp', 'module'] },
         { name: 'deliveryZones', indexes: ['neighborhood'] },
         { name: 'storeSettings', indexes: [] },
-        { name: 'users', indexes: ['username'] }
+        { name: 'users', indexes: ['username'] },
+        { name: 'shortcuts', indexes: ['key'] },
+        { name: 'appConfig', indexes: [] }
       ];
 
       stores.forEach(storeConfig => {
@@ -106,6 +110,35 @@ export async function initDB() {
           permissions: ['pos'],
           active: true
       });
+  }
+
+  // Seed Default Config
+  const configCount = await db.count('appConfig');
+  if (configCount === 0) {
+    await db.add('appConfig', {
+      id: 'main',
+      companyName: 'Bem Estar PDV',
+      autoAddOnBarcodeMatch: true,
+      defaultPrintReceipt: true,
+      theme: 'system'
+    });
+  }
+
+  // Seed Default Shortcuts
+  const shortcutCount = await db.count('shortcuts');
+  if (shortcutCount === 0) {
+    const defaultShortcuts = [
+      { id: uuidv4(), key: 'F1', action: 'OPEN_CUSTOMER_MODAL', label: 'Adicionar Cliente' },
+      { id: uuidv4(), key: 'F2', action: 'OPEN_PRODUCT_SEARCH', label: 'Pesquisar Produto' },
+      { id: uuidv4(), key: 'F3', action: 'PARK_SALE', label: 'Salvar Pedido' },
+      { id: uuidv4(), key: 'F4', action: 'OPEN_CASH_OPS', label: 'Movimentar Caixa' },
+      { id: uuidv4(), key: 'F5', action: 'FINALIZE_SALE', label: 'Finalizar Venda' },
+      { id: uuidv4(), key: 'F6', action: 'CLEAR_CART', label: 'Limpar Carrinho' },
+      { id: uuidv4(), key: 'F10', action: 'OPEN_SETTINGS', label: 'Configurações' },
+    ];
+    for (const s of defaultShortcuts) {
+      await db.add('shortcuts', s);
+    }
   }
 }
 

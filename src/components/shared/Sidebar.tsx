@@ -1,13 +1,13 @@
 
 import React, { useState } from 'react';
-import { ShoppingCart, Settings, Megaphone, Palette, Landmark, LogOut, Boxes } from 'lucide-react';
+import { ShoppingCart, Settings, Megaphone, Palette, Landmark, LogOut, Boxes, Settings2 } from 'lucide-react';
 import ThemeModal from './ThemeModal';
 import LogoIcon from './LogoIcon';
 import { useAuth } from '../../contexts/AuthContext';
 
 interface SidebarProps {
-  currentView: 'pos' | 'erp' | 'crm' | 'fiscal' | 'stock';
-  setView: (view: 'pos' | 'erp' | 'crm' | 'fiscal' | 'stock') => void;
+  currentView: 'pos' | 'erp' | 'crm' | 'fiscal' | 'stock' | 'settings';
+  setView: (view: 'pos' | 'erp' | 'crm' | 'fiscal' | 'stock' | 'settings') => void;
 }
 
 const navItems = [
@@ -16,6 +16,7 @@ const navItems = [
   { id: 'crm', label: 'CRM', icon: Megaphone },
   { id: 'fiscal', label: 'Fiscal', icon: Landmark },
   { id: 'stock', label: 'Estoque', icon: Boxes },
+  { id: 'settings', label: 'Config', icon: Settings2 },
 ];
 
 /**
@@ -54,7 +55,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView }) => {
           {filteredItems.map(item => (
             <button
               key={item.id}
-              onClick={() => setView(item.id as 'pos' | 'erp' | 'crm' | 'fiscal' | 'stock')}
+              onClick={() => setView(item.id as any)}
               className={`
                 flex flex-col items-center justify-center rounded-lg transition-all duration-200 
                 p-1 md:p-2 md:w-16 md:h-16
