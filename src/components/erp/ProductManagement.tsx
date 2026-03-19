@@ -4,7 +4,8 @@ import { db } from '../../services/databaseService';
 import type { Product } from '../../types';
 import { formatCurrency } from '../../utils/formatUtils';
 import Button from '../shared/Button';
-import { Plus, Edit, Trash2, Search, Package, AlertTriangle } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, Package, AlertTriangle, FileSpreadsheet } from 'lucide-react';
+import ProductImportModal from './ProductImportModal';
 
 interface ProductManagementProps {
     onNewProduct: () => void;
@@ -16,6 +17,7 @@ const ProductManagement: React.FC<ProductManagementProps> = ({ onNewProduct, onE
     const [products, setProducts] = useState<Product[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [loading, setLoading] = useState(true);
+    const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
     useEffect(() => {
         fetchProducts();
@@ -70,6 +72,9 @@ const ProductManagement: React.FC<ProductManagementProps> = ({ onNewProduct, onE
                     />
                 </div>
                 <div className="flex gap-2 w-full md:w-auto">
+                    <Button variant="secondary" onClick={() => setIsImportModalOpen(true)}>
+                        <FileSpreadsheet size={20} className="mr-2" /> Importar Planilha
+                    </Button>
                     <Button variant="secondary" onClick={onImportXML}>Importar XML</Button>
                     <Button onClick={onNewProduct}>
                         <Plus size={20} className="mr-2" /> Novo Produto
@@ -153,6 +158,13 @@ const ProductManagement: React.FC<ProductManagementProps> = ({ onNewProduct, onE
                     </div>
                 )}
             </div>
+
+            {isImportModalOpen && (
+                <ProductImportModal 
+                    onClose={() => setIsImportModalOpen(false)} 
+                    onSuccess={fetchProducts} 
+                />
+            )}
         </div>
     );
 };

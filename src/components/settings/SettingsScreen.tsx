@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { db, exportFullBackup, importFullBackup } from '../../services/databaseService';
+import { db, exportFullBackup, importFullBackup, seedInitialProducts } from '../../services/databaseService';
 import { sqliteStore } from '../../services/sqliteService';
 import type { Shortcut, AppConfig } from '../../types';
 import Button from '../shared/Button';
@@ -8,14 +8,16 @@ import {
   Settings, Keyboard, Monitor, Building2, Save, 
   RefreshCw, Trash2, Plus, CheckCircle2, AlertCircle,
   Moon, Sun, Laptop, Smartphone, Download, Upload,
-  Database as DbIcon, FolderOpen
+  Database as DbIcon, FolderOpen, Printer, Check
 } from 'lucide-react';
 
 const SettingsScreen: React.FC = () => {
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [shortcuts, setShortcuts] = useState<Shortcut[]>([]);
   const [dbPath, setDbPath] = useState<string | null>(null);
+  const [printers, setPrinters] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isSeeding, setIsSeeding] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
 
   useEffect(() => {
@@ -35,6 +37,9 @@ const SettingsScreen: React.FC = () => {
         const { ipcRenderer } = (window as any).require('electron');
         const electronConfig = await ipcRenderer.invoke('get-db-config');
         setDbPath(electronConfig.dbPath);
+        
+        const printerList = await ipcRenderer.invoke('list-printers');
+        setPrinters(printerList);
       }
     } catch (error) {
       console.error('Erro ao carregar configurações:', error);
@@ -108,6 +113,22 @@ const SettingsScreen: React.FC = () => {
       setTimeout(() => setMessage({ type: '', text: '' }), 3000);
     } catch (error) {
       setMessage({ type: 'error', text: 'Erro ao sincronizar produtos.' });
+    }
+  };
+
+  const handleSeedProducts = async () => {
+    if (!window.confirm('Deseja adicionar os produtos de exemplo ao banco de dados?')) return;
+    
+    setIsSeeding(true);
+    try {
+      await seedInitialProducts();
+      setMessage({ type: 'success', text: 'Produtos de exemplo adicionados com sucesso!' });
+      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+    } catch (error) {
+      console.error('Erro ao semear produtos:', error);
+      setMessage({ type: 'error', text: 'Erro ao adicionar produtos de exemplo.' });
+    } finally {
+      setIsSeeding(false);
     }
   };
 
@@ -248,6 +269,78 @@ const SettingsScreen: React.FC = () => {
             </div>
           </div>
 
+          {/* Printer Config Section */}
+          <div className="bg-white dark:bg-gray-800 rounded-[32px] p-8 border dark:border-gray-700 shadow-sm">
+            <div className="flex items-center gap-3 mb-6">
+              <Printer className="text-theme-primary" size={24} />
+              <h2 className="text-sm font-black uppercase tracking-widest text-gray-800 dark:text-white">Impressão e Impressoras</h2>
+            </div>
+            
+            <div className="space-y-6">
+              <div>
+                <label className="block text-[10px] font-black text-gray-400 uppercase mb-2 ml-1">Impressora Padrão</label>
+                <select
+                  className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border dark:border-gray-700 rounded-2xl outline-none focus:border-theme-primary font-bold text-sm"
+                  value={config?.printerName || ''}
+                  onChange={e => setConfig(prev => prev ? { ...prev, printerName: e.target.value } : null)}
+                >
+                  <option value="">Nenhuma (Usar Diálogo do Sistema)</option>
+                  {printers.map(p => (
+                    <option key={p.name} value={p.name}>{p.name} {p.isDefault ? '(Padrão)' : ''}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black text-gray-400 uppercase mb-2 ml-1">Largura do Papel</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {['58mm', '80mm'].map(w => (
+                    <button
+                      key={w}
+                      onClick={() => setConfig(prev => prev ? { ...prev, printerWidth: w as any } : null)}
+                      className={`flex items-center justify-center p-3 rounded-2xl border-2 transition-all gap-2 ${config?.printerWidth === w ? 'border-theme-primary bg-theme-primary/5 text-theme-primary' : 'border-gray-100 dark:border-gray-700 text-gray-400'}`}
+                    >
+                      {config?.printerWidth === w && <Check size={14} />}
+                      <span className="text-[10px] font-black uppercase">{w}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl border dark:border-gray-700">
+                  <div className="flex flex-col">
+                    <span className="text-[10px] font-black uppercase text-gray-800 dark:text-white">Impressão Automática</span>
+                    <span className="text-[9px] font-bold text-gray-400 uppercase">Imprimir ao finalizar venda</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={config?.printAuto}
+                    onChange={e => setConfig(prev => prev ? { ...prev, printAuto: e.target.checked } : null)}
+                    className="w-6 h-6 text-theme-primary bg-gray-100 border-gray-300 rounded focus:ring-theme-primary"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-900 rounded-2xl border dark:border-gray-700">
+                  <div className="flex flex-col">
+                    <span className="text-[10px] font-black uppercase text-gray-800 dark:text-white">Imprimir Logotipo</span>
+                    <span className="text-[9px] font-bold text-gray-400 uppercase">Incluir logo no topo do recibo</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={config?.printLogo}
+                    onChange={e => setConfig(prev => prev ? { ...prev, printLogo: e.target.checked } : null)}
+                    className="w-6 h-6 text-theme-primary bg-gray-100 border-gray-300 rounded focus:ring-theme-primary"
+                  />
+                </div>
+              </div>
+
+              <Button onClick={handleSaveConfig} className="w-full py-4">
+                <Save size={20} className="mr-2" /> Salvar Configurações
+              </Button>
+            </div>
+          </div>
+
           {/* Database Path Section */}
           <div className="bg-white dark:bg-gray-800 rounded-[32px] p-8 border dark:border-gray-700 shadow-sm">
             <div className="flex items-center gap-3 mb-6">
@@ -290,6 +383,20 @@ const SettingsScreen: React.FC = () => {
             <div className="space-y-4">
               <Button onClick={handleBackup} variant="secondary" className="w-full py-4">
                 <Download size={20} className="mr-2" /> Exportar Backup Total
+              </Button>
+              
+              <Button 
+                onClick={handleSeedProducts} 
+                variant="secondary" 
+                className="w-full py-4 border-emerald-500/30 text-emerald-600 dark:text-emerald-400"
+                disabled={isSeeding}
+              >
+                {isSeeding ? (
+                  <RefreshCw size={20} className="mr-2 animate-spin" />
+                ) : (
+                  <Plus size={20} className="mr-2" />
+                )}
+                Semear Produtos de Exemplo
               </Button>
               
               <div className="relative">
@@ -363,6 +470,7 @@ const SettingsScreen: React.FC = () => {
                           <option value="OPEN_CASH_OPS">Movimentar Caixa</option>
                           <option value="CLEAR_CART">Limpar Carrinho</option>
                           <option value="OPEN_SETTINGS">Configurações</option>
+                          <option value="PRINT_LAST_RECEIPT">Imprimir Último Cupom</option>
                           <option value="LOGOUT">Fechar Caixa / Sair</option>
                         </select>
                       </td>

@@ -119,6 +119,10 @@ export interface AppConfig {
   autoAddOnBarcodeMatch: boolean;
   defaultPrintReceipt: boolean;
   theme: 'light' | 'dark' | 'system';
+  printerName?: string;
+  printerWidth?: '58mm' | '80mm';
+  printAuto?: boolean;
+  printLogo?: boolean;
 }
 
 export interface Payment {

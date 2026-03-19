@@ -6,6 +6,7 @@ import { formatCurrency, formatDecimal, parseCurrencyInput } from '../../utils/f
 import { safeDate } from '../../utils/dateUtils';
 import { db } from '../../services/databaseService';
 import { sqliteStore } from '../../services/sqliteService';
+import { printReceipt } from '../../utils/printUtils';
 import { CashSessionContext } from '../../App';
 import { addToQueue } from '../../services/syncService'; 
 import { getActivePromotions, getPromotionalPrice } from '../../utils/promotionUtils';
@@ -248,12 +249,6 @@ const POSScreen: React.FC<POSScreenProps> = ({ setView }) => {
   const handleFinalizeSale = useCallback(async (payments: Payment[], change: number, shouldPrint: boolean) => {
     if (!session) return;
     
-    if (shouldPrint) {
-      console.log('Iniciando impressão de comanda/nota fiscal...');
-      // Aqui poderia ser chamada uma função real de impressão
-    }
-
-    const tx = db.transaction(['cashSessions', 'coupons', 'sales'], 'readwrite');
     const newSale: Sale = {
       id: uuidv4(), date: new Date(), items: cartItems, subtotal,
       totalDiscount: calculatedDiscount, totalAmount: total, payments, change,
@@ -264,6 +259,14 @@ const POSScreen: React.FC<POSScreenProps> = ({ setView }) => {
       manualDiscountType: manualDiscount.type ?? undefined,
       manualDiscountValue: manualDiscount.value || undefined,
     };
+
+    if (shouldPrint || appConfig?.printAuto) {
+      if (appConfig) {
+        printReceipt(newSale, appConfig);
+      }
+    }
+
+    const tx = db.transaction(['cashSessions', 'coupons', 'sales'], 'readwrite');
     
     const updatedSession = { ...session, sales: [...(session.sales || []), newSale] };
     // Usamos put() em vez de add() para maior resiliência em falhas de transação
@@ -298,7 +301,7 @@ const POSScreen: React.FC<POSScreenProps> = ({ setView }) => {
       setLastSale(newSale);
       setReceiptModalOpen(true);
     }
-  }, [cartItems, session, setSession, subtotal, total, calculatedDiscount, selectedCustomer, includeCpf, cpf, appliedCoupon, manualDiscount]);
+  }, [cartItems, session, setSession, subtotal, total, calculatedDiscount, selectedCustomer, includeCpf, cpf, appliedCoupon, manualDiscount, appConfig]);
   
   const handleConfirmParkSale = async (parkedSale: ParkedSale) => {
     await db.put('parkedSales', parkedSale);
@@ -419,6 +422,11 @@ const POSScreen: React.FC<POSScreenProps> = ({ setView }) => {
             break;
           case 'OPEN_SETTINGS':
             setView('settings');
+            break;
+          case 'PRINT_LAST_RECEIPT':
+            if (lastSale && appConfig) {
+              printReceipt(lastSale, appConfig);
+            }
             break;
           case 'LOGOUT':
             setShowCloseScreen(true);

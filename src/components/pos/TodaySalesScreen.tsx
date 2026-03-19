@@ -1,10 +1,11 @@
 
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, ReceiptText, Search, Calendar, User, DollarSign, Clock } from 'lucide-react';
+import { ArrowLeft, ReceiptText, Search, Calendar, User, DollarSign, Clock, Printer } from 'lucide-react';
 import { db } from '../../services/databaseService';
-import { Sale } from '../../types';
+import { Sale, AppConfig } from '../../types';
 import { formatCurrency } from '../../utils/formatUtils';
 import { safeLocaleString } from '../../utils/dateUtils';
+import { printReceipt } from '../../utils/printUtils';
 import Button from '../shared/Button';
 
 interface TodaySalesScreenProps {
@@ -14,6 +15,7 @@ interface TodaySalesScreenProps {
 
 const TodaySalesScreen: React.FC<TodaySalesScreenProps> = ({ onBack, onViewReceipt }) => {
   const [sales, setSales] = useState<Sale[]>([]);
+  const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -21,6 +23,8 @@ const TodaySalesScreen: React.FC<TodaySalesScreenProps> = ({ onBack, onViewRecei
     setLoading(true);
     try {
       const allSales = await db.getAll('sales');
+      const config = await db.get('appConfig', 'main');
+      setAppConfig(config || null);
       console.log('Todas as vendas encontradas:', allSales.length);
       
       const today = new Date();
@@ -122,6 +126,13 @@ const TodaySalesScreen: React.FC<TodaySalesScreenProps> = ({ onBack, onViewRecei
                     <p className="text-xl font-black text-theme-primary">{formatCurrency(sale.totalAmount)}</p>
                   </div>
                   <div className="flex gap-2">
+                    <button 
+                      onClick={() => appConfig && printReceipt(sale, appConfig)}
+                      className="p-2 hover:bg-theme-primary/10 rounded-lg text-theme-primary transition-colors" 
+                      title="Imprimir Cupom"
+                    >
+                      <Printer size={20} />
+                    </button>
                     <button 
                       onClick={() => onViewReceipt(sale)}
                       className="p-2 hover:bg-theme-primary/10 rounded-lg text-theme-primary transition-colors" 

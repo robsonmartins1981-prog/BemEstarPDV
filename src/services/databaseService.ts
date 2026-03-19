@@ -36,6 +36,67 @@ interface AppDB extends DBSchema {
 
 let db: IDBPDatabase<AppDB>;
 
+export async function seedInitialProducts() {
+  const initialCategories = [
+    { id: uuidv4(), name: 'MERCEARIA' },
+    { id: uuidv4(), name: 'HORTIFRUTI' },
+    { id: uuidv4(), name: 'GRANEL' },
+    { id: uuidv4(), name: 'BEBIDAS' }
+  ];
+
+  for (const cat of initialCategories) {
+    const existing = await db.get('categories', cat.id);
+    if (!existing) {
+      await db.add('categories', cat);
+    }
+  }
+
+  const getCatId = (name: string) => initialCategories.find(c => c.name === name)?.id || 'Sem Categoria';
+
+  const initialProducts = [
+    { sku: '7891000100101', name: 'ARROZ INTEGRAL 1KG', price: 12.50, category: 'MERCEARIA', unit: 'UN' },
+    { sku: '7891000100102', name: 'FEIJAO PRETO 1KG', price: 9.80, category: 'MERCEARIA', unit: 'UN' },
+    { sku: '7891000100103', name: 'ACUCAR DEMERARA 1KG', price: 7.20, category: 'MERCEARIA', unit: 'UN' },
+    { sku: '7891000100104', name: 'SAL ROSA DO HIMALAIA', price: 15.90, category: 'MERCEARIA', unit: 'UN' },
+    { sku: '7891000100105', name: 'AZEITE DE OLIVA EXTRA VIRGEM', price: 32.00, category: 'MERCEARIA', unit: 'UN' },
+    { sku: '1001', name: 'BANANA PRATA', price: 6.99, category: 'HORTIFRUTI', unit: 'KG' },
+    { sku: '1002', name: 'MACA GALA', price: 8.50, category: 'HORTIFRUTI', unit: 'KG' },
+    { sku: '1003', name: 'TOMATE ITALIANO', price: 7.80, category: 'HORTIFRUTI', unit: 'KG' },
+    { sku: '1004', name: 'CEBOLA BRANCA', price: 4.50, category: 'HORTIFRUTI', unit: 'KG' },
+    { sku: '1005', name: 'BATATA DOCE', price: 5.20, category: 'HORTIFRUTI', unit: 'KG' },
+    { sku: '2001', name: 'CASTANHA DO PARA', price: 89.00, category: 'GRANEL', unit: 'KG' },
+    { sku: '2002', name: 'AMENDOA DEFUMADA', price: 75.00, category: 'GRANEL', unit: 'KG' },
+    { sku: '2003', name: 'GRANOLA ARTESANAL', price: 25.00, category: 'GRANEL', unit: 'KG' },
+    { sku: '2004', name: 'CHIA EM GRAOS', price: 18.00, category: 'GRANEL', unit: 'KG' },
+    { sku: '2005', name: 'QUINOA REAL', price: 35.00, category: 'GRANEL', unit: 'KG' },
+    { sku: '3001', name: 'KOMBUCHA LIMAO E GENGIBRE', price: 14.00, category: 'BEBIDAS', unit: 'UN' },
+    { sku: '3002', name: 'SUCO DE UVA INTEGRAL 1L', price: 18.50, category: 'BEBIDAS', unit: 'UN' },
+    { sku: '3003', name: 'AGUA MINERAL 500ML', price: 3.00, category: 'BEBIDAS', unit: 'UN' },
+    { sku: '3004', name: 'CHA VERDE GELADO', price: 8.00, category: 'BEBIDAS', unit: 'UN' },
+    { sku: '4001', name: 'MEL SILVESTRE 500G', price: 28.00, category: 'MERCEARIA', unit: 'UN' },
+    { sku: '4002', name: 'PASTA DE AMENDOIM 500G', price: 22.00, category: 'MERCEARIA', unit: 'UN' },
+    { sku: '5001', name: 'OVO CAIPIRA (DUZIA)', price: 18.00, category: 'MERCEARIA', unit: 'UN' },
+    { sku: '5002', name: 'LEITE DE COCO 200ML', price: 6.50, category: 'MERCEARIA', unit: 'UN' },
+  ];
+
+  for (const p of initialProducts) {
+    const existing = await db.get('products', p.sku);
+    if (!existing) {
+      await db.add('products', {
+        id: p.sku,
+        name: p.name,
+        price: p.price,
+        unitType: p.unit as 'UN' | 'KG',
+        isBulk: p.unit === 'KG',
+        stock: 50,
+        categoryId: getCatId(p.category),
+        sku: p.sku,
+        barcode: p.sku
+      });
+    }
+  }
+}
+
 /**
  * Inicializa o banco de dados IndexedDB
  */
@@ -139,6 +200,12 @@ export async function initDB() {
     for (const s of defaultShortcuts) {
       await db.add('shortcuts', s);
     }
+  }
+
+  // Seed Initial Products if not exists
+  const productCount = await db.count('products');
+  if (productCount === 0) {
+    await seedInitialProducts();
   }
 }
 

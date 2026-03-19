@@ -156,6 +156,28 @@ app.whenReady().then(() => {
   });
 });
 
+// --- IPC: IMPRESSÃO ---
+ipcMain.handle('list-printers', async () => {
+  return await mainWindow.webContents.getPrintersAsync();
+});
+
+ipcMain.handle('print-receipt', async (event, htmlContent, printerName) => {
+  const printWindow = new BrowserWindow({ show: false });
+  await printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(htmlContent)}`);
+  
+  return new Promise((resolve) => {
+    printWindow.webContents.print({
+      silent: true,
+      deviceName: printerName,
+      printBackground: true,
+    }, (success, failureReason) => {
+      printWindow.close();
+      if (success) resolve({ success: true });
+      else resolve({ success: false, error: failureReason });
+    });
+  });
+});
+
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
