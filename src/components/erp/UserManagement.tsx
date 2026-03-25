@@ -127,7 +127,7 @@ const UserManagement: React.FC<UserManagementProps> = ({ onNewUser, onEditUser }
                             ? 'bg-red-500 text-white hover:bg-red-600 px-3' 
                             : 'hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500'
                         }`}
-                        disabled={user.username === 'admin'}
+                        disabled={user.username === 'admin' || user.username === 'robsonmartins1981@gmail.com'}
                         title={deleteConfirmId === user.id ? 'Clique novamente para confirmar' : 'Excluir usuário'}
                       >
                         <Trash2 size={16} />

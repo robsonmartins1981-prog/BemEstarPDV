@@ -4,7 +4,7 @@ import { Search, Package, Plus, X, Check } from 'lucide-react';
 import Modal from './Modal';
 import Button from './Button';
 import { db } from '../../services/databaseService';
-import { formatCurrency } from '../../utils/formatUtils';
+import { formatCurrency, formatQuantity } from '../../utils/formatUtils';
 import type { Product } from '../../types';
 
 interface ProductSearchModalProps {
@@ -116,7 +116,7 @@ const ProductSearchModal: React.FC<ProductSearchModalProps> = ({
                 </div>
                 <div className="text-right">
                   <p className="font-black text-theme-primary text-sm">{formatCurrency(product.price)}</p>
-                  <p className="text-[10px] text-gray-400 font-bold uppercase">Estoque: {product.stock}</p>
+                  <p className="text-[10px] text-gray-400 font-bold uppercase">Estoque: {formatQuantity(product.stock)}</p>
                 </div>
               </button>
             ))

@@ -37,6 +37,7 @@ const CategoryManagement: React.FC<CategoryManagementProps> = ({ onNewCategory, 
         if (deleteConfirmId === id) {
             try {
                 await db.delete('categories', id);
+                
                 setDeleteConfirmId(null);
                 fetchCategories();
             } catch (error) {

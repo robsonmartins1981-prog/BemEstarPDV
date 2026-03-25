@@ -1,22 +1,20 @@
 
 import React, { useState } from 'react';
-import { ShoppingCart, Settings, Megaphone, Palette, Landmark, LogOut, Boxes, Settings2 } from 'lucide-react';
+import { ShoppingCart, Settings, Megaphone, Palette, Landmark, LogOut, Boxes, Settings2, LayoutGrid } from 'lucide-react';
 import ThemeModal from './ThemeModal';
 import LogoIcon from './LogoIcon';
 import { useAuth } from '../../contexts/AuthContext';
 
 interface SidebarProps {
-  currentView: 'pos' | 'erp' | 'crm' | 'fiscal' | 'stock' | 'settings';
-  setView: (view: 'pos' | 'erp' | 'crm' | 'fiscal' | 'stock' | 'settings') => void;
+  currentView: 'pos' | 'erp' | 'stock' | 'settings';
+  setView: (view: 'pos' | 'erp' | 'stock' | 'settings') => void;
 }
 
 const navItems = [
-  { id: 'pos', label: 'PDV', icon: ShoppingCart },
-  { id: 'erp', label: 'ERP', icon: Settings },
-  { id: 'crm', label: 'CRM', icon: Megaphone },
-  { id: 'fiscal', label: 'Fiscal', icon: Landmark },
-  { id: 'stock', label: 'Estoque', icon: Boxes },
-  { id: 'settings', label: 'Config', icon: Settings2 },
+  { id: 'pos', label: 'PDV', icon: ShoppingCart, permission: 'PDV' },
+  { id: 'erp', label: 'ERP', icon: Settings, permission: 'ERP' },
+  { id: 'stock', label: 'Estoque', icon: Boxes, permission: 'ESTOQUE' },
+  { id: 'settings', label: 'Config', icon: Settings2, permission: 'CONFIG' },
 ];
 
 /**
@@ -37,7 +35,9 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView }) => {
   /**
    * Filtra os itens de navegação com base nas permissões do usuário
    */
-  const filteredItems = navItems.filter(item => hasPermission(item.id));
+  const filteredItems = navItems.filter(item => {
+    return hasPermission(item.permission);
+  });
 
   return (
     <>

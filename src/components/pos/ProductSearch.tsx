@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { db } from '../../services/databaseService';
+import { db, searchByIndex, getPaginated } from '../../services/databaseService';
 import type { Product } from '../../types';
-import { formatCurrency } from '../../utils/formatUtils';
+import { formatCurrency, formatQuantity } from '../../utils/formatUtils';
 import { Search, Package, Plus } from 'lucide-react';
 
 interface ProductSearchProps {
@@ -23,27 +23,37 @@ const ProductSearch: React.FC<ProductSearchProps> = ({ onSelect }) => {
           return;
         }
         
-        const allProducts = await db.getAll('products');
+        // Tenta buscar por código de barras exato primeiro (mais comum no PDV)
+        const barcodeResults = await searchByIndex('products', 'scaleCode', searchTerm.trim());
+        if (barcodeResults.length > 0) {
+          setResults(barcodeResults.slice(0, 10));
+          setSelectedIndex(0);
+          
+          const config = await db.get('appConfig', 'main');
+          if (config?.autoAddOnBarcodeMatch) {
+            onSelect(barcodeResults[0]);
+            setSearchTerm('');
+            return;
+          }
+        }
+
+        // Busca por ID exato
+        const idResult = await db.get('products', searchTerm.trim());
+        if (idResult) {
+          setResults([idResult]);
+          setSelectedIndex(0);
+          return;
+        }
+
+        // Busca por nome (parcial) - ainda requer getAll ou um cursor filtrado
+        // Para otimizar, pegamos apenas os primeiros 100 produtos e filtramos
+        const allProducts = await getPaginated('products', 200, 0);
         const filtered = (allProducts || []).filter(p => 
-          p && (
-            (p.name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) || 
-            (p.barcode || '').includes(searchTerm) ||
-            (p.id || '').includes(searchTerm)
-          )
+          p && (p.name?.toLowerCase() || '').includes(searchTerm.toLowerCase())
         ).slice(0, 10);
         
         setResults(filtered);
         setSelectedIndex(0);
-
-        // Auto-add if exact barcode match
-        const config = await db.get('appConfig', 'main');
-        if (config?.autoAddOnBarcodeMatch) {
-          const exactMatch = filtered.find(p => p.barcode === searchTerm.trim());
-          if (exactMatch) {
-            onSelect(exactMatch);
-            setSearchTerm('');
-          }
-        }
       } catch (error) {
         console.error('Erro na busca de produtos:', error);
       }
@@ -101,7 +111,7 @@ const ProductSearch: React.FC<ProductSearchProps> = ({ onSelect }) => {
               </div>
               <div className="text-right">
                 <p className="text-lg font-black text-theme-primary">{formatCurrency(product.price)}</p>
-                <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">{product.stock} em estoque</p>
+                <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">{formatQuantity(product.stock)} em estoque</p>
               </div>
             </button>
           ))}

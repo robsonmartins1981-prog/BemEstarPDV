@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Users, UserPlus, Search, DollarSign, Trash2, Edit2, ChevronRight, History, CheckCircle2, XCircle } from 'lucide-react';
-import { db } from '../../services/databaseService';
+import { Users, UserPlus, Search, DollarSign, Trash2, Edit2, ChevronRight, History, CheckCircle2, XCircle, ChevronLeft } from 'lucide-react';
+import { db, getPaginated } from '../../services/databaseService';
 import { Customer, Sale, PaymentMethod, CashOperation } from '../../types';
 import { formatCurrency } from '../../utils/formatUtils';
 import { safeFormat } from '../../utils/dateUtils';
@@ -14,51 +14,70 @@ interface CustomerManagementProps {
   onEditCustomer: (id: string) => void;
 }
 
+const ITEMS_PER_PAGE = 12;
+
 const CustomerManagement: React.FC<CustomerManagementProps> = ({ onNewCustomer, onEditCustomer }) => {
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [sales, setSales] = useState<Sale[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [showDebtModal, setShowDebtModal] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(PaymentMethod.DINHEIRO);
+  const [customerDebts, setCustomerDebts] = useState<Record<string, number>>({});
+  const [page, setPage] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [allCustomers, allSales] = await Promise.all([
-        db.getAll('customers'),
-        db.getAll('sales')
-      ]);
-      setCustomers(allCustomers.sort((a, b) => a.name.localeCompare(b.name)));
-      setSales(allSales);
+      let currentCustomers: Customer[] = [];
+      if (searchTerm) {
+        const allCustomers = await db.getAll('customers');
+        currentCustomers = allCustomers.filter(c => 
+          c.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+          c.cpf.includes(searchTerm)
+        ).slice(0, 100);
+        setTotalCount(currentCustomers.length);
+      } else {
+        currentCustomers = await getPaginated('customers', ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
+        const count = await db.count('customers');
+        setTotalCount(count);
+      }
+      
+      setCustomers(currentCustomers);
+
+      // Calcular dívidas apenas para os clientes visíveis
+      const debts: Record<string, number> = {};
+      for (const customer of currentCustomers) {
+        const customerSales = await db.getAllFromIndex('sales', 'customerId', customer.id);
+        const debt = customerSales.reduce((total, sale) => {
+          const notinhaPayments = (sale.payments || []).filter(p => 
+            p.method === PaymentMethod.NOTINHA && 
+            p.customerId === customer.id && 
+            !p.settled
+          );
+          return total + notinhaPayments.reduce((sum, p) => sum + p.amount, 0);
+        }, 0);
+        debts[customer.id] = debt;
+      }
+      setCustomerDebts(debts);
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page, searchTerm]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
 
-  const getCustomerDebt = (customerId: string) => {
-    return sales.reduce((total, sale) => {
-      const notinhaPayments = (sale.payments || []).filter(p => 
-        p.method === PaymentMethod.NOTINHA && 
-        p.customerId === customerId && 
-        !p.settled
-      );
-      return total + notinhaPayments.reduce((sum, p) => sum + p.amount, 0);
-    }, 0);
-  };
-
   const handleDeleteCustomer = async (id: string) => {
     if (!confirm('Tem certeza que deseja excluir este cliente?')) return;
     try {
       await db.delete('customers', id);
+      
       await loadData();
     } catch (error) {
       alert('Erro ao excluir cliente.');
@@ -73,7 +92,7 @@ const CustomerManagement: React.FC<CustomerManagementProps> = ({ onNewCustomer, 
       return;
     }
 
-    const currentDebt = getCustomerDebt(selectedCustomer.id);
+    const currentDebt = customerDebts[selectedCustomer.id] || 0;
     if (amountToPay > currentDebt) {
       if (!confirm(`O valor informado (${formatCurrency(amountToPay)}) é maior que a dívida atual (${formatCurrency(currentDebt)}). Deseja continuar?`)) return;
     }
@@ -90,9 +109,9 @@ const CustomerManagement: React.FC<CustomerManagementProps> = ({ onNewCustomer, 
 
       // 2. Marcar as "Notinhas" como pagas proporcionalmente
       let remainingPayment = amountToPay;
-      const updatedSales = [...sales];
+      const customerSales = await db.getAllFromIndex('sales', 'customerId', selectedCustomer.id);
       
-      for (const sale of updatedSales) {
+      for (const sale of customerSales) {
         if (remainingPayment <= 0) break;
         
         const notinhaPayments = (sale.payments || []).filter(p => 
@@ -100,6 +119,8 @@ const CustomerManagement: React.FC<CustomerManagementProps> = ({ onNewCustomer, 
           p.customerId === selectedCustomer.id && 
           !p.settled
         );
+
+        if (notinhaPayments.length === 0) continue;
 
         for (const p of notinhaPayments) {
           if (remainingPayment <= 0) break;
@@ -109,21 +130,10 @@ const CustomerManagement: React.FC<CustomerManagementProps> = ({ onNewCustomer, 
             p.settled = true;
             p.settledAt = new Date().toISOString();
           } else {
-            // Pagamento parcial de uma notinha específica
-            // Aqui poderíamos dividir o pagamento, mas para simplificar vamos apenas abater o valor
-            // e manter como não liquidada se for parcial, ou criar uma nova lógica.
-            // Para este MVP, vamos considerar que se o valor for menor, ele abate mas não liquida totalmente.
-            // Na verdade, o ideal é que o 'amount' da notinha diminua e uma nova entrada de pagamento real seja criada.
-            // Mas vamos manter simples: se pagou menos que a notinha, ela continua aberta com o valor total? Não.
-            // Vamos subtrair do valor da notinha e criar um registro de pagamento real.
-            
-            // P.amount = 100, remaining = 40. Nova notinha = 60.
             const paidPart = remainingPayment;
             p.amount -= paidPart;
             remainingPayment = 0;
             
-            // Adicionar um registro de que parte foi paga? 
-            // O ideal é que a venda tenha um novo pagamento do tipo real.
             sale.payments.push({
               method: paymentMethod,
               amount: paidPart,
@@ -133,7 +143,6 @@ const CustomerManagement: React.FC<CustomerManagementProps> = ({ onNewCustomer, 
           }
         }
         
-        // Salvar a venda atualizada
         await db.put('sales', sale);
       }
 
@@ -141,7 +150,7 @@ const CustomerManagement: React.FC<CustomerManagementProps> = ({ onNewCustomer, 
       const newOp: CashOperation = {
         id: uuidv4(),
         sessionId: openSession.id,
-        type: 'VENDA', // Usamos VENDA para que entre no faturamento
+        type: 'VENDA',
         amount: amountToPay,
         date: new Date().toISOString(),
         description: `Recebimento de Notinha: ${selectedCustomer.name}`,
@@ -159,10 +168,7 @@ const CustomerManagement: React.FC<CustomerManagementProps> = ({ onNewCustomer, 
     }
   };
 
-  const filteredCustomers = customers.filter(c => 
-    c.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    c.cpf.includes(searchTerm)
-  );
+  const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
 
   return (
     <div className="space-y-6">
@@ -173,7 +179,10 @@ const CustomerManagement: React.FC<CustomerManagementProps> = ({ onNewCustomer, 
             type="text"
             placeholder="Buscar por nome ou CPF..."
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              setPage(0);
+            }}
             className="w-full pl-10 pr-4 py-2 border rounded-xl dark:bg-gray-800 dark:border-gray-700 focus:ring-2 focus:ring-theme-primary/20 outline-none"
           />
         </div>
@@ -183,14 +192,18 @@ const CustomerManagement: React.FC<CustomerManagementProps> = ({ onNewCustomer, 
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filteredCustomers.length === 0 ? (
+        {loading ? (
+          <div className="col-span-full p-12 text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-theme-primary mx-auto"></div>
+          </div>
+        ) : customers.length === 0 ? (
           <div className="col-span-full bg-white dark:bg-gray-800 rounded-3xl shadow-sm border dark:border-gray-700 p-12 text-center">
             <Users size={64} className="mx-auto text-gray-200 mb-4" />
             <p className="text-gray-400 font-bold uppercase text-sm">Nenhum cliente encontrado</p>
           </div>
         ) : (
-          filteredCustomers.map(customer => {
-            const debt = getCustomerDebt(customer.id);
+          customers.map(customer => {
+            const debt = customerDebts[customer.id] || 0;
             return (
               <div key={customer.id} className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-md transition-all group">
                 <div className="flex justify-between items-start mb-4">
@@ -249,6 +262,33 @@ const CustomerManagement: React.FC<CustomerManagementProps> = ({ onNewCustomer, 
         )}
       </div>
 
+      {/* Paginação */}
+      {!searchTerm && totalPages > 1 && (
+        <div className="flex items-center justify-between bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm border dark:border-gray-700">
+          <p className="text-xs text-gray-500 font-bold uppercase tracking-widest">
+            Página {page + 1} de {totalPages} ({totalCount} clientes)
+          </p>
+          <div className="flex gap-2">
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => setPage(p => Math.max(0, p - 1))}
+              disabled={page === 0}
+            >
+              <ChevronLeft size={18} />
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+              disabled={page >= totalPages - 1}
+            >
+              <ChevronRight size={18} />
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Modal de Pagamento de Dívida */}
       <Modal
         isOpen={showDebtModal}
@@ -270,7 +310,7 @@ const CustomerManagement: React.FC<CustomerManagementProps> = ({ onNewCustomer, 
               <div>
                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Cliente</p>
                 <p className="font-bold text-gray-800 dark:text-gray-100">{selectedCustomer.name}</p>
-                <p className="text-xs text-red-600 font-bold">Dívida Total: {formatCurrency(getCustomerDebt(selectedCustomer.id))}</p>
+                <p className="text-xs text-red-600 font-bold">Dívida Total: {formatCurrency(customerDebts[selectedCustomer.id] || 0)}</p>
               </div>
             </div>
 

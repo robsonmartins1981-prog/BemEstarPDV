@@ -20,7 +20,6 @@ import HRManagement from './HRManagement';
 import EmployeeFormPage from './EmployeeFormPage';
 import CashManagement from '../cash/CashManagement';
 import SalesReport from './SalesReport';
-import DeliveryZones from './DeliveryZones';
 import GeneralSettings from './GeneralSettings';
 import SettingsScreen from '../settings/SettingsScreen';
 import SupplierManagement from './SupplierManagement';
@@ -31,10 +30,10 @@ import UserManagement from './UserManagement';
 import UserFormPage from './UserFormPage';
 
 interface ERPScreenProps {
-    setView: (view: 'pos' | 'erp' | 'crm' | 'fiscal' | 'stock') => void;
+    setView: (view: 'pos' | 'erp' | 'stock' | 'settings') => void;
 }
 
-type ActiveModule = 'dashboard' | 'products' | 'categories' | 'customers' | 'suppliers' | 'reports' | 'nfeImport' | 'inventory' | 'generateOrder' | 'hr' | 'cashManagement' | 'deliveryZones' | 'generalSettings' | 'users' | 'accountsPayable' | 'salesReport' | 'systemConfig';
+type ActiveModule = 'dashboard' | 'products' | 'categories' | 'customers' | 'suppliers' | 'reports' | 'nfeImport' | 'inventory' | 'generateOrder' | 'hr' | 'cashManagement' | 'generalSettings' | 'users' | 'accountsPayable' | 'salesReport' | 'systemConfig';
 
 type ERPView = 
   | { type: 'module', id: ActiveModule }
@@ -52,16 +51,6 @@ interface MenuModule { id: string; label: string; icon: React.ElementType; items
 
 const menuModules: MenuModule[] = [
     {
-        id: 'dashboard',
-        label: 'Análise e BI',
-        icon: BarChart,
-        color: 'text-theme-primary',
-        items: [
-            { id: 'dashboard', label: 'Dashboard Financeiro' },
-            { id: 'salesReport', label: 'Relatório de Vendas' },
-        ],
-    },
-    {
         id: 'operacional',
         label: 'Operações e Caixa',
         icon: Wallet,
@@ -69,6 +58,8 @@ const menuModules: MenuModule[] = [
         items: [
             { id: 'cashManagement', label: 'Gestão de Caixa' },
             { id: 'hr', label: 'Equipe e RH' },
+            { id: 'dashboard', label: 'Dashboard Financeiro' },
+            { id: 'salesReport', label: 'Relatório de Vendas' },
         ],
     },
     {
@@ -123,12 +114,13 @@ const menuModules: MenuModule[] = [
         ],
     },
     {
-        id: 'configuracoes',
-        label: 'Logística',
-        icon: Settings2,
-        color: 'text-gray-500',
+        id: 'admin',
+        label: 'Administração',
+        icon: ShieldCheck,
+        color: 'text-theme-primary',
+        adminOnly: true,
         items: [
-            { id: 'deliveryZones', label: 'Bairros e Fretes' },
+            { id: 'generalSettings', label: 'Configurações Gerais' },
         ],
     },
 ];
@@ -137,11 +129,6 @@ const ERPScreen: React.FC<ERPScreenProps> = ({ setView }) => {
     const { user: currentUser } = useAuth();
     const [currentErpView, setCurrentErpView] = useState<ERPView>({ type: 'module', id: 'dashboard' }); 
     const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['dashboard', 'operacional', 'seguranca', 'estoque']));
-    const [categories, setCategories] = useState<Category[]>([]);
-
-    useEffect(() => {
-        db.getAll('categories').then(cats => setCategories(cats.sort((a,b) => a.name.localeCompare(b.name))));
-    }, []);
 
     const toggleSection = (sectionId: string) => {
         setExpandedSections(prev => {
@@ -154,7 +141,7 @@ const ERPScreen: React.FC<ERPScreenProps> = ({ setView }) => {
 
     const renderActiveModule = () => {
         switch(currentErpView.type) {
-            case 'product_form': return <ProductFormPage productId={currentErpView.productId} categories={categories} onBack={() => setCurrentErpView({ type: 'module', id: 'products' })} />;
+            case 'product_form': return <ProductFormPage productId={currentErpView.productId} onBack={() => setCurrentErpView({ type: 'module', id: 'products' })} />;
             case 'customer_form': return <CustomerFormPage customerId={currentErpView.customerId} onBack={() => setCurrentErpView({ type: 'module', id: 'customers' })} />;
             case 'category_form': return <CategoryFormPage categoryId={currentErpView.categoryId} onBack={() => setCurrentErpView({ type: 'module', id: 'categories' })} />;
             case 'supplier_form': return <SupplierFormPage supplierId={currentErpView.supplierId} onBack={() => setCurrentErpView({ type: 'module', id: 'suppliers' })} />;
@@ -168,7 +155,6 @@ const ERPScreen: React.FC<ERPScreenProps> = ({ setView }) => {
                     case 'users': return <UserManagement onNewUser={() => setCurrentErpView({ type: 'user_form' })} onEditUser={(id) => setCurrentErpView({ type: 'user_form', userId: id })} />;
                     case 'cashManagement': return <CashManagement />;
                     case 'salesReport': return <SalesReport />;
-                    case 'deliveryZones': return <DeliveryZones />;
                     case 'generalSettings': return <GeneralSettings />;
                     case 'systemConfig': return <SettingsScreen />;
                     case 'products': return <ProductManagement onNewProduct={() => setCurrentErpView({ type: 'product_form' })} onEditProduct={(id) => setCurrentErpView({ type: 'product_form', productId: id })} onImportXML={() => setCurrentErpView({ type: 'module', id: 'nfeImport' })} />;
@@ -216,11 +202,12 @@ const ERPScreen: React.FC<ERPScreenProps> = ({ setView }) => {
 
                 <nav className="flex-grow p-3 space-y-1">
                     {menuModules.filter(m => !m.adminOnly || currentUser?.role === 'ADMIN').map(module => {
-                        const hasAnyErpSubPermission = currentUser?.permissions?.some(p => p.startsWith('erp:'));
                         const visibleItems = module.items.filter(item => {
                             if (currentUser?.role === 'ADMIN') return true;
-                            if (currentUser?.permissions?.includes(`erp:${item.id}`)) return true;
-                            if (currentUser?.permissions?.includes('erp') && !hasAnyErpSubPermission) return true;
+                            if (currentUser?.role === 'GERENTE') {
+                                // Gerente tem acesso a quase tudo exceto segurança e admin
+                                return !['seguranca', 'admin'].includes(module.id);
+                            }
                             return false;
                         });
 

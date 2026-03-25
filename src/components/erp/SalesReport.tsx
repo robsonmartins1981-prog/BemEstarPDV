@@ -22,19 +22,16 @@ const SalesReport: React.FC = () => {
   const loadSales = async () => {
     setLoading(true);
     try {
-      const allSales = await db.getAll('sales');
-      
       const startDate = new Date(dateFilter.start);
       startDate.setHours(0, 0, 0, 0);
       const endDate = new Date(dateFilter.end);
       endDate.setHours(23, 59, 59, 999);
 
-      const filtered = allSales.filter(sale => {
-        const saleDate = new Date(sale.date);
-        return saleDate >= startDate && saleDate <= endDate;
-      }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
-      setSales(filtered);
+      // Usar o índice de data para buscar apenas o intervalo necessário
+      const range = IDBKeyRange.bound(startDate.toISOString(), endDate.toISOString());
+      const filteredSales = await db.getAllFromIndex('sales', 'date', range);
+      
+      setSales(filteredSales.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
     } catch (error) {
       console.error("Erro ao carregar relatório de vendas:", error);
     } finally {

@@ -13,10 +13,16 @@ interface UserFormPageProps {
 
 const AVAILABLE_PERMISSIONS = [
   { id: 'pos', label: 'PDV (Vendas)' },
-  { id: 'erp', label: 'ERP (Gestão)' },
-  { id: 'crm', label: 'CRM (Marketing)' },
+  { id: 'erp', label: 'ERP (Gestão Completa)' },
+  { id: 'erp:dashboard', label: 'ERP: Análise e BI' },
+  { id: 'erp:operacional', label: 'ERP: Operação de Caixa' },
+  { id: 'erp:seguranca', label: 'ERP: Sistemas e Acessos' },
+  { id: 'erp:estoque', label: 'ERP: Estoque' },
+  { id: 'erp:compras', label: 'ERP: Compras' },
+  { id: 'erp:clientes', label: 'ERP: Clientes' },
+  { id: 'erp:fornecedores', label: 'ERP: Fornecedores' },
+  { id: 'erp:configuracoes', label: 'ERP: Logística' },
   { id: 'fiscal', label: 'Fiscal' },
-  { id: 'stock', label: 'Estoque' },
 ];
 
 const UserFormPage: React.FC<UserFormPageProps> = ({ userId, onBack }) => {
@@ -46,10 +52,20 @@ const UserFormPage: React.FC<UserFormPageProps> = ({ userId, onBack }) => {
 
     setLoading(true);
     try {
+      let finalPassword = formData.password || '';
+      
+      if (userId && !formData.password) {
+        // Se estiver editando e a senha estiver vazia, buscar a senha atual
+        const existingUser = await db.get('users', userId);
+        if (existingUser) {
+          finalPassword = existingUser.password;
+        }
+      }
+
       const userToSave: User = {
         id: userId || uuidv4(),
         username: formData.username!,
-        password: formData.password || '',
+        password: finalPassword,
         role: formData.role as UserRole,
         permissions: formData.permissions || [],
         active: formData.active ?? true

@@ -9,6 +9,7 @@ const Dashboard: React.FC = () => {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [totalOutstandingDebt, setTotalOutstandingDebt] = useState(0);
   const [loading, setLoading] = useState(true);
   const [dateFilter, setDateFilter] = useState({
     start: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
@@ -22,15 +23,22 @@ const Dashboard: React.FC = () => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [allExpenses, allSales, allCategories] = await Promise.all([
-        db.getAll('expenses'),
-        db.getAll('sales'),
-        db.getAll('categories')
+      const startDate = new Date(dateFilter.start);
+      startDate.setHours(0, 0, 0, 0);
+      const endDate = new Date(dateFilter.end);
+      endDate.setHours(23, 59, 59, 999);
+
+      const [periodExpenses, periodSales, allCategories, pendingExpenses] = await Promise.all([
+        db.getAllFromIndex('expenses', 'purchaseDate', IDBKeyRange.bound(startDate, endDate)),
+        db.getAllFromIndex('sales', 'date', IDBKeyRange.bound(startDate, endDate)),
+        db.getAll('categories'),
+        db.getAllFromIndex('expenses', 'status', 'PENDING')
       ]);
 
-      setExpenses(allExpenses);
-      setSales(allSales);
+      setExpenses(periodExpenses);
+      setSales(periodSales);
       setCategories(allCategories);
+      setTotalOutstandingDebt(pendingExpenses.reduce((acc, curr) => acc + curr.amount, 0));
     } catch (error) {
       console.error("Erro ao carregar dados do dashboard:", error);
     } finally {
@@ -38,30 +46,13 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const startDate = new Date(dateFilter.start);
-  startDate.setHours(0, 0, 0, 0);
-  const endDate = new Date(dateFilter.end);
-  endDate.setHours(23, 59, 59, 999);
-
-  // Filtered data based on Purchase Date for expenses and Date for sales
-  const periodExpenses = expenses.filter(e => {
-    const d = new Date(e.purchaseDate);
-    return d >= startDate && d <= endDate;
-  });
-
-  const periodSales = sales.filter(s => {
-    const d = new Date(s.date);
-    return d >= startDate && d <= endDate;
-  });
-
   // KPIs
-  const totalSpendInPeriod = periodExpenses.reduce((acc, curr) => acc + curr.amount, 0);
-  const totalRevenueInPeriod = periodSales.reduce((acc, curr) => acc + curr.totalAmount, 0);
-  const totalOutstandingDebt = expenses.filter(e => e.status === 'PENDING').reduce((acc, curr) => acc + curr.amount, 0);
+  const totalSpendInPeriod = expenses.reduce((acc, curr) => acc + curr.amount, 0);
+  const totalRevenueInPeriod = sales.reduce((acc, curr) => acc + curr.totalAmount, 0);
 
   // Spend by Nature (Category)
   const spendByNature = categories.map(cat => {
-    const amount = periodExpenses
+    const amount = expenses
       .filter(e => e.categoryId === cat.id)
       .reduce((acc, curr) => acc + curr.amount, 0);
     return {
@@ -72,7 +63,7 @@ const Dashboard: React.FC = () => {
   }).filter(item => item.amount > 0).sort((a, b) => b.amount - a.amount);
 
   // Add "Uncategorized" if any
-  const uncategorizedAmount = periodExpenses
+  const uncategorizedAmount = expenses
     .filter(e => !e.categoryId)
     .reduce((acc, curr) => acc + curr.amount, 0);
   

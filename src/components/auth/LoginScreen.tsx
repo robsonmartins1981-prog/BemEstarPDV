@@ -4,7 +4,12 @@ import { useAuth } from '../../contexts/AuthContext';
 import Button from '../shared/Button';
 import { Lock, User, ShieldCheck } from 'lucide-react';
 
-const LoginScreen: React.FC = () => {
+interface LoginScreenProps {
+  onBack?: () => void;
+  onSwitchToRegister?: () => void;
+}
+
+const LoginScreen: React.FC<LoginScreenProps> = ({ onBack, onSwitchToRegister }) => {
   const { login } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -17,12 +22,14 @@ const LoginScreen: React.FC = () => {
     setError('');
     
     try {
-      const success = await login(username, password);
+      const trimmedUsername = username.trim();
+      const success = await login(trimmedUsername, password);
       if (!success) {
         setError('Usuário ou senha inválidos');
       }
-    } catch (err) {
-      setError('Erro ao realizar login');
+    } catch (err: any) {
+      console.error("Login Error Details:", err);
+      setError('Erro ao realizar login local');
     } finally {
       setIsLoading(false);
     }
@@ -35,8 +42,8 @@ const LoginScreen: React.FC = () => {
           <div className="bg-theme-primary/10 p-4 rounded-2xl mb-4">
             <ShieldCheck className="w-10 h-10 text-theme-primary" />
           </div>
-          <h1 className="text-2xl font-black uppercase tracking-tight text-gray-800 dark:text-white">Bem-Estar PDV</h1>
-          <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mt-1">Acesso ao Sistema</p>
+          <h1 className="text-2xl font-black uppercase tracking-tight text-gray-800 dark:text-white text-center">Bem Estar PDV</h1>
+          <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mt-1">Acesso Offline ao Sistema</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -80,11 +87,11 @@ const LoginScreen: React.FC = () => {
           >
             Entrar no Sistema
           </Button>
-        </form>
 
-        <div className="mt-8 text-center">
-          <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Versão Desktop 1.0.0</p>
-        </div>
+          <div className="mt-8 text-center">
+            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Versão Desktop 1.0.0 (Offline)</p>
+          </div>
+        </form>
       </div>
     </div>
   );

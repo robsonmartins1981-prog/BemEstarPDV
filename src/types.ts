@@ -13,15 +13,31 @@ export enum OrderType {
   ENTREGA = 'Entrega'
 }
 
-export type UserRole = 'ADMIN' | 'OPERATOR';
+export type UserRole = 'ADMIN' | 'USER_CAIXA' | 'GERENTE';
+
+export type Module = 'PDV' | 'ERP' | 'ESTOQUE' | 'CONFIG';
+
+export type SubModuleERP = 
+  | 'OPERACOES_CAIXA' 
+  | 'SISTEMA_ACESSOS' 
+  | 'ESTOQUE' 
+  | 'COMPRAS' 
+  | 'CLIENTES' 
+  | 'FORNECEDORES' 
+  | 'ADMINISTRACAO';
 
 export interface User {
     id: string;
     username: string;
     password?: string;
     role: UserRole;
-    permissions: string[];
+    permissions: string[]; // Can be module names or specific submodule names
     active: boolean;
+    fullName?: string;
+    email?: string;
+    phone?: string;
+    address?: string;
+    cpf?: string;
 }
 
 export type ProductUnitType = 'UN' | 'KG';
@@ -44,8 +60,10 @@ export interface Product {
   origin?: string; 
   csosn_cst?: string; 
   image?: string; 
+  images?: string[]; // Up to 5 images
   categoryId?: string; 
   supplierId?: string; 
+  purchaseConversionFactor?: number;
   isKit?: boolean;
   kitItems?: { productId: string; quantity: number }[];
   
@@ -115,7 +133,6 @@ export interface Shortcut {
 export interface AppConfig {
   id: 'main';
   companyName: string;
-  whatsappNumber?: string;
   autoAddOnBarcodeMatch: boolean;
   defaultPrintReceipt: boolean;
   theme: 'light' | 'dark' | 'system';
@@ -123,6 +140,7 @@ export interface AppConfig {
   printerWidth?: '58mm' | '80mm';
   printAuto?: boolean;
   printLogo?: boolean;
+  localDatabasePath?: string;
 }
 
 export interface Payment {
@@ -145,14 +163,11 @@ export interface Sale {
   customerCPF?: string; 
   customerId?: string; 
   sessionId?: string; 
-  isSynced: boolean; 
-  couponCodeApplied?: string; 
   manualDiscountType?: 'PERCENTAGE' | 'FIXED_AMOUNT'; 
   manualDiscountValue?: number;
   type?: OrderType;
   deliveryAddress?: string;
   deliveryFee?: number;
-  neighborhood?: string;
   contactPhone?: string;
   notes?: string;
 }
@@ -208,15 +223,8 @@ export interface AuditLog {
     userId?: string;
 }
 
-export interface DeliveryZone {
-    id: string;
-    neighborhood: string;
-    fee: number;
-}
-
 export interface StoreSettings {
     id: 'main';
-    whatsappNumber: string;
     storeName: string;
 }
 
@@ -232,8 +240,15 @@ export interface ParkedSale {
   contactPhone?: string; 
   notes?: string;
   deliveryFee?: number;
-  neighborhood?: string;
   payments?: Payment[];
+}
+
+export interface Terminal {
+  id: string;
+  name: string;
+  active: boolean;
+  lastOpenedAt?: string;
+  lastOpenedBy?: string;
 }
 
 export interface CashOperation {
@@ -269,43 +284,16 @@ export interface Customer {
   cellphone?: string; 
   email?: string; 
   address?: string; 
-  neighborhoodId?: string; 
   socialMedia?: string; 
   birthDate?: Date; 
   creditLimit?: number; 
   observations?: string; 
   tags?: string[];
-  
-  // CRM Re-purchase (Feature 4)
-  repurchaseCycle?: number; // Ciclo de recompra em dias (ex: 30)
-  lastPurchaseDate?: Date;
 }
 export interface ExpenseSubItem { id: string; description: string; amount: number; categoryId?: string; }
 export interface Expense { id: string; description: string; amount: number; supplierId?: string; categoryId?: string; dueDate: Date; purchaseDate: Date; paidDate?: Date; status: 'PENDING' | 'PAID'; isFixed?: boolean; subItems?: ExpenseSubItem[]; }
 export interface InventoryLot { id: string; productId: string; supplierId?: string; lotNumber?: string; quantity: number; expirationDate?: Date; entryDate: Date; costPrice: number; }
 export interface InventoryAdjustment { id: string; productId: string; lotId: string; quantityChange: number; reason: string; date: Date; }
-export interface PromotionItem {
-  productId: string;
-  productName: string;
-  originalPrice: number;
-  promotionalPrice: number;
-}
-
-export interface Promotion {
-  id: string;
-  name: string;
-  startDate: Date;
-  endDate: Date;
-  items: PromotionItem[];
-  active: boolean;
-}
-
-export interface Coupon { id: string; code: string; type: 'PERCENTAGE' | 'FIXED_AMOUNT'; value: number; expiryDate: Date; maxUses: number; currentUses: number; isActive: number; }
-export type SegmentRuleType = 'INACTIVE_CUSTOMERS' | 'BIRTHDAY_MONTH' | 'VIP_CUSTOMERS' | 'PRODUCT_BUYERS';
-export interface SegmentRule { type: SegmentRuleType; value: any; }
-export interface Segment { id: string; name: string; rules: SegmentRule[]; description: string; }
-export interface Campaign { id: string; name: string; segmentId: string; channel: 'EMAIL' | 'WHATSAPP'; subject?: string; messageTemplate: string; status: 'DRAFT' | 'SENT'; }
-export interface AutomationRule { id: string; name: string; trigger: string; campaignId: string; isActive: number; }
 
 export interface EmitenteConfig {
     cnpj: string;
@@ -338,7 +326,26 @@ export interface NfceConfig {
 
 export interface FiscalConfig { id: 'main'; emitente: EmitenteConfig; api: ApiConfig; nfce: NfceConfig; }
 
-export interface SyncJob { id: string; type: string; payload: any; createdAt: Date; retryCount: number; lastAttempt?: Date; status: 'PENDING' | 'FAILED'; }
 export type NFeItemStatus = 'LINKED' | 'UNLINKED' | 'NEW';
-export interface NFeItem { code: string; name: string; ncm: string; quantity: number; unitPrice: number; totalPrice: number; status: NFeItemStatus; linkedProductDetails?: Product; expirationDate: string; lotNumber?: string; conversionFactor: number; }
+export interface NFeItem { 
+  code: string; 
+  name: string; 
+  ncm: string; 
+  cfop: string;
+  uCom: string;
+  quantity: number; 
+  unitPrice: number; 
+  totalPrice: number; 
+  discount: number;
+  otherExpenses: number;
+  freight: number;
+  insurance: number;
+  status: NFeItemStatus; 
+  linkedProductDetails?: Product; 
+  expirationDate: string; 
+  lotNumber?: string; 
+  conversionFactor: number;
+  sellingPrice?: number;
+  profitMargin?: number;
+}
 export interface NFeData { supplier: { cnpj: string; name: string }; items: NFeItem[]; totalAmount: number; issueDate: Date; }

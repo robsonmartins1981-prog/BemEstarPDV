@@ -1,18 +1,16 @@
 
 import React, { useState, useEffect, useCallback, createContext, useContext } from 'react';
-import { db, initDB } from './services/databaseService';
+import { db, initDB, searchByIndex } from './services/databaseService';
 import { v4 as uuidv4 } from 'uuid';
 import type { CashSession, CashOperation, User } from './types';
 import POSScreen from './components/pos/POSScreen';
 import CloseCashScreen from './components/cash/CloseCashScreen';
 import ERPScreen from './components/erp/ERPScreen';
-import CRMScreen from './components/crm/CRMScreen';
-import FiscalScreen from './components/fiscal/FiscalScreen'; 
 import StockScreen from './components/stock/StockScreen';
 import SettingsScreen from './components/settings/SettingsScreen';
 import Sidebar from './components/shared/Sidebar';
 import LoginScreen from './components/auth/LoginScreen';
-import { startSyncService } from './services/syncService'; 
+import ErrorBoundary from './components/shared/ErrorBoundary';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 
 // --- THEME MANAGEMENT ---
@@ -50,20 +48,32 @@ export const CashSessionContext = React.createContext<{
 });
 
 function AppContent() {
-  const { user, hasPermission } = useAuth();
+  const { user, hasPermission, loading } = useAuth();
   const [session, setSession] = useState<CashSession | null>(null);
   const [showCloseScreen, setShowCloseScreen] = useState<boolean>(false);
   const [dbReady, setDbReady] = useState<boolean>(false);
   const [dbError, setDbError] = useState<string | null>(null);
-  const [view, setView] = useState<'pos' | 'erp' | 'crm' | 'fiscal' | 'stock' | 'settings'>('pos');
+  const [view, setView] = useState<'pos' | 'erp' | 'stock' | 'settings' | 'login'>('login');
+
+  useEffect(() => {
+    if (user) {
+      if (view === 'login') {
+        setView('pos');
+      }
+    } else {
+      if (view !== 'login') {
+        setView('login');
+      }
+    }
+  }, [user]);
 
   useEffect(() => {
     const initializeApp = async () => {
       try {
         await initDB(); 
-        startSyncService(); 
-        const allSessions = await db.getAll('cashSessions');
-        const activeSession = (allSessions || []).find(s => s.status === 'OPEN');
+        
+        const openSessions = await searchByIndex('cashSessions', 'status', 'OPEN');
+        const activeSession = openSessions[0];
         if (activeSession) setSession(activeSession);
         setDbReady(true); 
       } catch (error: any) {
@@ -120,25 +130,46 @@ function AppContent() {
   }, [session]);
   
   if (dbError) return <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white p-4"><p className="text-xl font-black text-red-500 uppercase mb-4">Erro ao Iniciar</p><p className="text-center bg-gray-800 p-4 rounded-lg font-mono text-sm max-w-2xl overflow-auto">{dbError}</p><button onClick={() => window.location.reload()} className="mt-6 px-6 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg font-bold">Tentar Novamente</button></div>;
-  if (!dbReady) return <div className="flex items-center justify-center min-h-screen bg-gray-900 text-white"><p className="text-xl animate-pulse font-black uppercase">Iniciando Bem Estar...</p></div>;
-  if (!user) return <LoginScreen />;
+  
+  if (!dbReady || loading) return (
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white">
+      <div className="w-12 h-12 border-4 border-theme-primary border-t-transparent rounded-full animate-spin mb-4"></div>
+      <p className="text-xl animate-pulse font-black uppercase">Iniciando Bem Estar PDV...</p>
+    </div>
+  );
+  
+  if (view === 'login') return <LoginScreen onBack={() => {}} onSwitchToRegister={() => {}} />;
   
   /**
    * Renderiza o conteúdo principal com base na view selecionada e permissões
    */
   const renderContent = () => {
-    if (!hasPermission(view === 'settings' ? 'erp' : view)) {
-        const availableModules = ['pos', 'erp', 'crm', 'fiscal', 'stock', 'settings'].filter(hasPermission);
+    // Mapeamento de views para permissões
+    const permissionMap: Record<string, string> = {
+      pos: 'PDV',
+      erp: 'ERP',
+      stock: 'ESTOQUE',
+      settings: 'CONFIG'
+    };
+
+    const requiredPermission = permissionMap[view] || view.toUpperCase();
+
+    if (!hasPermission(requiredPermission)) {
+        const availableModules = ['pos', 'erp', 'stock', 'settings'].filter(v => {
+          const perm = permissionMap[v] || v.toUpperCase();
+          return hasPermission(perm);
+        });
+        
         if (availableModules.length > 0) {
             setView(availableModules[0] as any);
             return null;
         }
+        
         return <div className="p-20 text-center font-black text-red-500 uppercase">Usuário sem permissões de acesso.</div>;
     }
+    
     switch(view) {
       case 'erp': return <ERPScreen setView={setView} />;
-      case 'crm': return <CRMScreen setView={setView} />;
-      case 'fiscal': return <FiscalScreen setView={setView} />;
       case 'stock': return <StockScreen setView={setView} />;
       case 'settings': return <div className="p-8 max-w-6xl mx-auto w-full"><SettingsScreen /></div>;
       case 'pos':
@@ -152,7 +183,7 @@ function AppContent() {
         <CloseCashScreen session={session} onClose={handleCloseSession} />
       ) : (
         <div className="flex flex-col md:flex-row h-screen bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200 font-sans overflow-hidden">
-          <Sidebar currentView={view} setView={setView} />
+          {user && <Sidebar currentView={view} setView={setView} />}
           <main className="flex-1 flex flex-col overflow-hidden relative mb-16 md:mb-0">
               {renderContent()}
           </main>
@@ -164,11 +195,13 @@ function AppContent() {
 
 function App() {
   return (
-    <AuthProvider>
-        <ThemeProvider>
-            <AppContent />
-        </ThemeProvider>
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+          <ThemeProvider>
+              <AppContent />
+          </ThemeProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
 

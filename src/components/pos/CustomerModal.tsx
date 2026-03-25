@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { db } from '../../services/databaseService';
+import { db, getPaginated } from '../../services/databaseService';
 import type { Customer } from '../../types';
 import Modal from '../shared/Modal';
 import Button from '../shared/Button';
@@ -26,8 +26,9 @@ const CustomerModal: React.FC<CustomerModalProps> = ({ isOpen, onClose, onSelect
   const fetchCustomers = async () => {
     setLoading(true);
     try {
-      const allCustomers = await db.getAll('customers');
-      setCustomers(allCustomers.sort((a, b) => a.name.localeCompare(b.name)));
+      // Busca apenas os primeiros 100 clientes para seleção rápida
+      const recentCustomers = await getPaginated('customers', 100, 0);
+      setCustomers((recentCustomers || []).sort((a, b) => a.name.localeCompare(b.name)));
     } catch (error) {
       console.error("Erro ao buscar clientes:", error);
     } finally {

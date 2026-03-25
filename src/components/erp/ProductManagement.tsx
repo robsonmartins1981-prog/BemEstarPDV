@@ -1,10 +1,10 @@
 
-import React, { useState, useEffect } from 'react';
-import { db } from '../../services/databaseService';
+import React, { useState, useEffect, useCallback } from 'react';
+import { db, getPaginated } from '../../services/databaseService';
 import type { Product } from '../../types';
-import { formatCurrency } from '../../utils/formatUtils';
+import { formatCurrency, formatQuantity } from '../../utils/formatUtils';
 import Button from '../shared/Button';
-import { Plus, Edit, Trash2, Search, Package, AlertTriangle, FileSpreadsheet } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, Package, AlertTriangle, FileSpreadsheet, Globe, ChevronLeft, ChevronRight } from 'lucide-react';
 import ProductImportModal from './ProductImportModal';
 
 interface ProductManagementProps {
@@ -13,27 +13,47 @@ interface ProductManagementProps {
     onImportXML: () => void;
 }
 
+const ITEMS_PER_PAGE = 20;
+
 const ProductManagement: React.FC<ProductManagementProps> = ({ onNewProduct, onEditProduct, onImportXML }) => {
     const [products, setProducts] = useState<Product[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [loading, setLoading] = useState(true);
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+    const [page, setPage] = useState(0);
+    const [totalCount, setTotalCount] = useState(0);
 
-    useEffect(() => {
-        fetchProducts();
-    }, []);
-
-    const fetchProducts = async () => {
+    const fetchProducts = useCallback(async () => {
         setLoading(true);
         try {
-            const allProducts = await db.getAll('products');
-            setProducts(allProducts.sort((a, b) => a.name.localeCompare(b.name)));
+            // Se houver termo de busca, infelizmente o IndexedDB não suporta busca textual parcial nativa eficiente
+            // Então para busca, ainda precisamos carregar tudo ou usar uma estratégia de busca por prefixo
+            // Por enquanto, se houver busca, carregamos tudo (limitado a 200 para não estourar)
+            if (searchTerm) {
+                const allProducts = await db.getAll('products');
+                const filtered = allProducts.filter(p => 
+                    (p.name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) || 
+                    p.sku?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    (p.barcode || '').includes(searchTerm)
+                );
+                setProducts(filtered.slice(0, 200));
+                setTotalCount(filtered.length);
+            } else {
+                const paginatedProducts = await getPaginated('products', ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
+                const count = await db.count('products');
+                setProducts(paginatedProducts);
+                setTotalCount(count);
+            }
         } catch (error) {
             console.error("Erro ao buscar produtos:", error);
         } finally {
             setLoading(false);
         }
-    };
+    }, [page, searchTerm]);
+
+    useEffect(() => {
+        fetchProducts();
+    }, [fetchProducts]);
 
     const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
@@ -41,6 +61,7 @@ const ProductManagement: React.FC<ProductManagementProps> = ({ onNewProduct, onE
         if (deleteConfirmId === id) {
             try {
                 await db.delete('products', id);
+                
                 setDeleteConfirmId(null);
                 fetchProducts();
             } catch (error) {
@@ -52,11 +73,7 @@ const ProductManagement: React.FC<ProductManagementProps> = ({ onNewProduct, onE
         }
     };
 
-    const filteredProducts = products.filter(p => 
-        (p.name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) || 
-        p.sku?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (p.barcode || '').includes(searchTerm)
-    );
+    const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
 
     return (
         <div className="space-y-6">
@@ -68,7 +85,10 @@ const ProductManagement: React.FC<ProductManagementProps> = ({ onNewProduct, onE
                         placeholder="Buscar por nome, SKU ou código de barras..."
                         className="w-full pl-10 pr-4 py-2 border rounded-xl dark:bg-gray-800 dark:border-gray-700"
                         value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
+                        onChange={(e) => {
+                            setSearchTerm(e.target.value);
+                            setPage(0);
+                        }}
                     />
                 </div>
                 <div className="flex gap-2 w-full md:w-auto">
@@ -95,7 +115,7 @@ const ProductManagement: React.FC<ProductManagementProps> = ({ onNewProduct, onE
                             </tr>
                         </thead>
                         <tbody className="divide-y dark:divide-gray-700">
-                            {filteredProducts.map(product => (
+                            {products.map(product => (
                                 <tr key={product.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
                                     <td className="px-6 py-4">
                                         <div className="flex items-center gap-3">
@@ -107,7 +127,9 @@ const ProductManagement: React.FC<ProductManagementProps> = ({ onNewProduct, onE
                                                 </div>
                                             )}
                                             <div>
-                                                <p className="font-bold text-sm text-gray-800 dark:text-gray-100">{product.name}</p>
+                                                <div className="flex items-center gap-2">
+                                                    <p className="font-bold text-sm text-gray-800 dark:text-gray-100">{product.name}</p>
+                                                </div>
                                                 <p className="text-[10px] text-gray-400 uppercase font-black">{product.categoryId || 'Sem Categoria'}</p>
                                             </div>
                                         </div>
@@ -124,7 +146,7 @@ const ProductManagement: React.FC<ProductManagementProps> = ({ onNewProduct, onE
                                     <td className="px-6 py-4">
                                         <div className="flex items-center gap-2">
                                             <span className={`font-bold text-sm ${product.stock <= (product.minStock || 0) ? 'text-red-500' : 'text-gray-600 dark:text-gray-300'}`}>
-                                                {product.stock} {product.unitType?.toLowerCase() || 'un'}
+                                                {formatQuantity(product.stock)} {product.unitType?.toLowerCase() || 'un'}
                                             </span>
                                             {product.stock <= (product.minStock || 0) && <AlertTriangle size={14} className="text-red-500" />}
                                         </div>
@@ -151,10 +173,38 @@ const ProductManagement: React.FC<ProductManagementProps> = ({ onNewProduct, onE
                         </tbody>
                     </table>
                 </div>
-                {filteredProducts.length === 0 && !loading && (
+                
+                {products.length === 0 && !loading && (
                     <div className="p-12 text-center">
                         <Package size={48} className="mx-auto text-gray-200 mb-4" />
                         <p className="text-gray-400 font-bold uppercase text-sm">Nenhum produto encontrado</p>
+                    </div>
+                )}
+
+                {/* Paginação */}
+                {!searchTerm && totalPages > 1 && (
+                    <div className="px-6 py-4 bg-gray-50 dark:bg-gray-700/30 border-t dark:border-gray-700 flex items-center justify-between">
+                        <p className="text-xs text-gray-500 font-bold uppercase tracking-widest">
+                            Página {page + 1} de {totalPages} ({totalCount} produtos)
+                        </p>
+                        <div className="flex gap-2">
+                            <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                onClick={() => setPage(p => Math.max(0, p - 1))}
+                                disabled={page === 0}
+                            >
+                                <ChevronLeft size={18} />
+                            </Button>
+                            <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+                                disabled={page >= totalPages - 1}
+                            >
+                                <ChevronRight size={18} />
+                            </Button>
+                        </div>
                     </div>
                 )}
             </div>

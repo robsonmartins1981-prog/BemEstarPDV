@@ -4,7 +4,7 @@ import { BarChart, Boxes, AlertTriangle, Search, Filter, ArrowRight, History, Ca
 import { db } from '../../services/databaseService';
 import type { Product, InventoryLot, InventoryAdjustment, StockMovement } from '../../types';
 import { v4 as uuidv4 } from 'uuid';
-import { formatCurrency } from '../../utils/formatUtils';
+import { formatCurrency, formatQuantity } from '../../utils/formatUtils';
 import Button from '../shared/Button';
 
 const InventoryReport: React.FC = () => {
@@ -190,7 +190,7 @@ const InventoryReport: React.FC = () => {
                     </td>
                     <td className="px-6 py-4">
                       <span className={`px-3 py-1 rounded-full text-xs font-black ${product.stock <= 5 ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-600'}`}>
-                        {product.stock} {product.unitType || (product.isBulk ? 'KG' : 'UN')}
+                        {formatQuantity(product.stock)} {product.unitType || (product.isBulk ? 'KG' : 'UN')}
                       </span>
                     </td>
                     <td className="px-6 py-4">

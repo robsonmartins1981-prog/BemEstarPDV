@@ -22,21 +22,20 @@ const TodaySalesScreen: React.FC<TodaySalesScreenProps> = ({ onBack, onViewRecei
   const fetchSales = async () => {
     setLoading(true);
     try {
-      const allSales = await db.getAll('sales');
       const config = await db.get('appConfig', 'main');
       setAppConfig(config || null);
-      console.log('Todas as vendas encontradas:', allSales.length);
       
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       
-      const todaySales = allSales.filter(sale => {
-        const saleDate = new Date(sale.date);
-        return saleDate >= today;
-      }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      // Busca apenas as vendas de hoje usando o índice de data
+      const range = IDBKeyRange.lowerBound(today);
+      const todaySales = await db.getAllFromIndex('sales', 'date', range);
+      
+      const sortedSales = (todaySales || []).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-      console.log('Vendas de hoje filtradas:', todaySales.length);
-      setSales(todaySales);
+      console.log('Vendas de hoje filtradas:', sortedSales.length);
+      setSales(sortedSales);
     } catch (error) {
       console.error("Erro ao carregar vendas de hoje:", error);
     } finally {
@@ -105,7 +104,6 @@ const TodaySalesScreen: React.FC<TodaySalesScreenProps> = ({ onBack, onViewRecei
                   <div>
                     <div className="flex items-center gap-2">
                       <p className="font-black text-gray-800 dark:text-gray-100 uppercase tracking-tight">Venda #{sale.id.slice(0, 8)}</p>
-                      {sale.isSynced && <span className="px-2 py-0.5 bg-green-100 text-green-600 text-[8px] font-black uppercase rounded-full">Sincronizada</span>}
                     </div>
                     <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1">
                       <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1">

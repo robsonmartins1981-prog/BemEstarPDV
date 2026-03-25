@@ -19,8 +19,9 @@ const ParkedSalesScreen: React.FC<ParkedSalesScreenProps> = ({ onBack, onLoadSal
   const fetchParkedSales = async () => {
     setLoading(true);
     try {
-      const sales = await db.getAll('parkedSales');
-      setParkedSales(sales.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+      // Busca todas as vendas pausadas usando o índice de criação para ordenação
+      const sales = await db.getAllFromIndex('parkedSales', 'createdAt');
+      setParkedSales((sales || []).reverse()); // Reverte para ter as mais recentes primeiro
     } catch (error) {
       console.error("Erro ao carregar pedidos em aberto:", error);
     } finally {

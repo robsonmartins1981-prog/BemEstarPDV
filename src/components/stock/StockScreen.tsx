@@ -2,11 +2,12 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../services/databaseService';
 import type { Product, StockMovement, StockAlert } from '../../types';
-import { formatCurrency } from '../../utils/formatUtils';
+import { formatCurrency, formatQuantity } from '../../utils/formatUtils';
 import { safeLocaleString, safeDate } from '../../utils/dateUtils';
 import Button from '../shared/Button';
-import { Package, AlertTriangle, History, ArrowUpRight, ArrowDownRight, Search, Plus } from 'lucide-react';
+import { Package, AlertTriangle, History, ArrowUpRight, ArrowDownRight, Search, Plus, FileSpreadsheet } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
+import ProductImportModal from '../erp/ProductImportModal';
 
 interface StockScreenProps {
   setView: (view: any) => void;
@@ -23,6 +24,7 @@ const StockScreen: React.FC<StockScreenProps> = ({ setView }) => {
   const [activeTab, setActiveTab] = useState<'inventory' | 'alerts' | 'history'>('inventory');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [isMovementModalOpen, setIsMovementModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -104,6 +106,9 @@ const StockScreen: React.FC<StockScreenProps> = ({ setView }) => {
           <h1 className="text-xl font-black uppercase tracking-tight text-gray-800 dark:text-white">Controle de Estoque</h1>
         </div>
         <div className="flex gap-2">
+          <Button variant="secondary" onClick={() => setIsImportModalOpen(true)}>
+            <FileSpreadsheet size={20} className="mr-2" /> Importar Planilha
+          </Button>
           <Button variant="secondary" onClick={() => loadData()}>Atualizar</Button>
         </div>
       </header>
@@ -154,7 +159,7 @@ const StockScreen: React.FC<StockScreenProps> = ({ setView }) => {
                       <p className="text-[10px] text-gray-400 uppercase font-black">{product.barcode || 'Sem código'}</p>
                     </div>
                     <div className={`px-2 py-1 rounded text-[10px] font-black uppercase ${product.stock <= (product.minStock || 0) ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
-                      {product.stock} em estoque
+                      {formatQuantity(product.stock)} em estoque
                     </div>
                   </div>
                   
@@ -280,6 +285,13 @@ const StockScreen: React.FC<StockScreenProps> = ({ setView }) => {
             </div>
           </div>
         </div>
+      )}
+
+      {isImportModalOpen && (
+        <ProductImportModal 
+          onClose={() => setIsImportModalOpen(false)} 
+          onSuccess={loadData} 
+        />
       )}
     </div>
   );

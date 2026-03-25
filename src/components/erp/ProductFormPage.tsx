@@ -1,44 +1,41 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { db } from '../../services/databaseService';
-import type { Product, Category, Supplier, InventoryLot } from '../../types';
+import type { Product, Category, Supplier } from '../../types';
 import Button from '../shared/Button';
 import ProductSearchModal from '../shared/ProductSearchModal';
-import { ImageOff, ReceiptText, Save, History, TrendingUp, TrendingDown, Minus, Upload, X, ImageIcon, Calendar, Boxes, Tag, Hash, Barcode, PackagePlus, Plus, Trash2, Search } from 'lucide-react';
+import { ImageOff, ReceiptText, Save, History, TrendingUp, TrendingDown, Minus, Upload, X, ImageIcon, Calendar, Boxes, Tag, Hash, Barcode, PackagePlus, Plus, Trash2, Search, CheckCircle2 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
-import { formatCurrency, formatDecimal, parseCurrencyInput } from '../../utils/formatUtils';
+import { formatCurrency, formatDecimal, parseCurrencyInput, compressImage } from '../../utils/formatUtils';
 import { safeLocaleDateString, safeLocaleTimeString } from '../../utils/dateUtils';
 
 interface ProductFormPageProps {
   productId?: string;
-  categories: Category[];
   onBack: () => void;
 }
 
-const ProductFormPage: React.FC<ProductFormPageProps> = ({ productId, categories, onBack }) => {
+const ProductFormPage: React.FC<ProductFormPageProps> = ({ productId, onBack }) => {
     const [formData, setFormData] = useState<Partial<Product>>({});
+    const [categories, setCategories] = useState<Category[]>([]);
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
     const [allProducts, setAllProducts] = useState<Product[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('main');
+    const [status, setStatus] = useState<{ type: 'success' | 'error' | null, message: string | null }>({ type: null, message: null });
+    const [isSubmitting, setIsSubmitting] = useState(false);
     
     const [kitItemInput, setKitItemInput] = useState({ productId: '', quantity: 1 });
     const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
     
-    const [initialLot, setInitialLot] = useState({
-        number: 'LOTE-' + new Date().getFullYear() + '-' + Math.floor(Math.random() * 1000),
-        expirationDate: '',
-        initialStock: 0,
-        costPrice: 0
-    });
-
     useEffect(() => {
         const fetchData = async () => {
             setIsLoading(true);
-            const [allSuppliers, products] = await Promise.all([
+            const [allCategories, allSuppliers, products] = await Promise.all([
+                db.getAll('categories'),
                 db.getAll('suppliers'),
                 db.getAll('products')
             ]);
+            setCategories(allCategories.sort((a,b) => a.name.localeCompare(b.name)));
             setSuppliers(allSuppliers.sort((a,b) => a.name.localeCompare(b.name)));
             setAllProducts(products.sort((a,b) => a.name.localeCompare(b.name)));
 
@@ -98,91 +95,85 @@ const ProductFormPage: React.FC<ProductFormPageProps> = ({ productId, categories
         }
     };
 
-    const handleInitialLotChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const { name, value } = e.target;
-        if (name === 'costPrice') {
-            const numericValue = parseCurrencyInput(value);
-            setInitialLot(prev => ({ ...prev, [name]: numericValue }));
-        } else {
-            setInitialLot(prev => ({ ...prev, [name]: name === 'initialStock' ? parseFloat(value) || 0 : value }));
-        }
-    };
-
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        console.log("Iniciando submissão do formulário de produto...", formData);
+        setStatus({ type: null, message: null });
         
         // Validação de Código Interno OBRIGATÓRIO
         if (!formData.id?.trim()) {
-            alert('O Código Interno do produto é obrigatório.');
+            setStatus({ type: 'error', message: 'O Código Interno do produto é obrigatório.' });
             return;
         }
 
         if (!formData.name || formData.price === undefined || formData.price < 0) {
-            alert('Preencha os campos obrigatórios.');
+            setStatus({ type: 'error', message: 'Preencha os campos obrigatórios (Nome e Preço).' });
             return;
         }
 
-        // Se for novo produto, verifica se o código interno já existe
-        if (!productId) {
-            const existing = await db.get('products', formData.id);
-            if (existing) {
-                alert(`Erro: Já existe um produto cadastrado com o código interno "${formData.id}".`);
-                return;
-            }
-        }
+        setIsSubmitting(true);
+        try {
+            const tx = db.transaction(['products', 'inventoryLots'], 'readwrite');
+            const productStore = tx.objectStore('products');
+            const lotStore = tx.objectStore('inventoryLots');
 
-        const tx = db.transaction(['products', 'inventoryLots'], 'readwrite');
-        const productStore = tx.objectStore('products');
-        const lotStore = tx.objectStore('inventoryLots');
-
-        const finalProduct = { ...formData } as Product;
-        
-        // Registrar histórico de preços se houver alteração
-        const now = new Date();
-        if (productId) {
-            const oldProduct = await db.get('products', productId);
-            if (oldProduct) {
-                if (oldProduct.price !== finalProduct.price) {
-                    finalProduct.salePriceHistory = [
-                        ...(oldProduct.salePriceHistory || []),
-                        { date: now, price: finalProduct.price }
-                    ];
-                } else {
-                    finalProduct.salePriceHistory = oldProduct.salePriceHistory;
-                }
-
-                if (oldProduct.costPrice !== finalProduct.costPrice) {
-                    finalProduct.purchasePriceHistory = [
-                        ...(oldProduct.purchasePriceHistory || []),
-                        { date: now, price: finalProduct.costPrice }
-                    ];
-                } else {
-                    finalProduct.purchasePriceHistory = oldProduct.purchasePriceHistory;
+            // Se for novo produto, verifica se o código interno já existe
+            if (!productId) {
+                const existing = await productStore.get(formData.id!);
+                if (existing) {
+                    setStatus({ type: 'error', message: `Erro: Já existe um produto cadastrado com o código interno "${formData.id}".` });
+                    setIsSubmitting(false);
+                    return;
                 }
             }
-        } else {
-            // Novo produto
-            finalProduct.salePriceHistory = [{ date: now, price: finalProduct.price }];
-            finalProduct.purchasePriceHistory = [{ date: now, price: finalProduct.costPrice }];
-            finalProduct.stock = initialLot.initialStock;
+
+            const finalProduct = { ...formData } as Product;
+            
+            // Registrar histórico de preços se houver alteração
+            const now = new Date();
+            if (productId) {
+                const oldProduct = await productStore.get(productId);
+                if (oldProduct) {
+                    if (oldProduct.price !== finalProduct.price) {
+                        finalProduct.salePriceHistory = [
+                            ...(oldProduct.salePriceHistory || []),
+                            { date: now, price: finalProduct.price }
+                        ];
+                    } else {
+                        finalProduct.salePriceHistory = oldProduct.salePriceHistory;
+                    }
+
+                    if (oldProduct.costPrice !== finalProduct.costPrice) {
+                        finalProduct.purchasePriceHistory = [
+                            ...(oldProduct.purchasePriceHistory || []),
+                            { date: now, price: finalProduct.costPrice }
+                        ];
+                    } else {
+                        finalProduct.purchasePriceHistory = oldProduct.purchasePriceHistory;
+                    }
+                }
+            } else {
+                // Novo produto
+                finalProduct.salePriceHistory = [{ date: now, price: finalProduct.price }];
+                finalProduct.purchasePriceHistory = [{ date: now, price: finalProduct.costPrice }];
+                finalProduct.stock = finalProduct.stock || 0;
+            }
+
+            await productStore.put(finalProduct);
+
+            await tx.done;
+            console.log("Produto salvo localmente com sucesso.");
+            
+            setStatus({ type: 'success', message: 'Produto cadastrado com sucesso!' });
+            setTimeout(() => {
+                onBack();
+            }, 1500);
+        } catch (error: any) {
+            console.error("Erro ao salvar produto:", error);
+            setStatus({ type: 'error', message: 'Erro ao salvar produto: ' + (error.message || 'Erro desconhecido') });
+        } finally {
+            setIsSubmitting(false);
         }
-
-        await productStore.put(finalProduct);
-
-        if (!productId && initialLot.initialStock > 0) {
-            await lotStore.put({
-                id: uuidv4(),
-                productId: finalProduct.id,
-                supplierId: finalProduct.supplierId,
-                quantity: initialLot.initialStock,
-                entryDate: new Date(),
-                expirationDate: initialLot.expirationDate ? new Date(initialLot.expirationDate + 'T12:00:00') : undefined,
-                costPrice: initialLot.costPrice || finalProduct.costPrice || 0,
-            });
-        }
-
-        await tx.done;
-        onBack();
     };
 
     const handleAddKitItem = () => {
@@ -240,12 +231,17 @@ const ProductFormPage: React.FC<ProductFormPageProps> = ({ productId, categories
                     <button onClick={() => setActiveTab('main')} className={`px-4 py-3 text-xs font-black uppercase tracking-widest border-b-2 transition-all ${activeTab === 'main' ? 'border-theme-primary text-theme-primary' : 'border-transparent text-gray-400'}`}>1. Ficha Técnica</button>
                     <button onClick={() => setActiveTab('kit')} className={`px-4 py-3 text-xs font-black uppercase tracking-widest border-b-2 transition-all ${activeTab === 'kit' ? 'border-theme-primary text-theme-primary' : 'border-transparent text-gray-400'}`}>Kit / Cesta</button>
                     <button onClick={() => setActiveTab('history')} className={`px-4 py-3 text-xs font-black uppercase tracking-widest border-b-2 transition-all ${activeTab === 'history' ? 'border-theme-primary text-theme-primary' : 'border-transparent text-gray-400'}`}>Histórico de Preços</button>
-                    {!productId && <button onClick={() => setActiveTab('inventory')} className={`px-4 py-3 text-xs font-black uppercase tracking-widest border-b-2 transition-all ${activeTab === 'inventory' ? 'border-theme-primary text-theme-primary' : 'border-transparent text-gray-400'}`}>Lote de Entrada</button>}
                     <button onClick={() => setActiveTab('tax')} className={`px-4 py-3 text-xs font-black uppercase tracking-widest border-b-2 transition-all ${activeTab === 'tax' ? 'border-theme-primary text-theme-primary' : 'border-transparent text-gray-400'}`}>Dados Fiscais</button>
                 </nav>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
+                {status.message && (
+                    <div className={`p-4 rounded-2xl flex items-center gap-3 animate-in fade-in slide-in-from-top-2 duration-300 ${status.type === 'success' ? 'bg-green-100 text-green-800 border border-green-200' : 'bg-red-100 text-red-800 border border-red-200'}`}>
+                        {status.type === 'success' ? <CheckCircle2 size={20} /> : <X size={20} />}
+                        <span className="text-sm font-bold uppercase tracking-tight">{status.message}</span>
+                    </div>
+                )}
                 {activeTab === 'main' && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                         <div className="space-y-5">
@@ -336,6 +332,49 @@ const ProductFormPage: React.FC<ProductFormPageProps> = ({ productId, categories
                                         <option value="UN">Unidade (UN)</option>
                                         <option value="KG">Quilograma (KG)</option>
                                     </select>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-[10px] font-black text-gray-400 uppercase ml-1 mb-1">Estoque Atual</label>
+                                    <input 
+                                        type="number" 
+                                        name="stock" 
+                                        value={formData.stock || 0} 
+                                        onChange={handleChange} 
+                                        className={inputStyle + " font-mono font-black text-lg"}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black text-gray-400 uppercase ml-1 mb-1">Estoque Mínimo</label>
+                                    <input 
+                                        type="number" 
+                                        name="minStock" 
+                                        value={formData.minStock || 0} 
+                                        onChange={handleChange} 
+                                        className={inputStyle + " font-mono"}
+                                    />
+                                </div>
+                            </div>
+                            <div className="p-4 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border border-gray-100 dark:border-gray-700">
+                                <label className="block text-[10px] font-black text-gray-400 uppercase ml-1 mb-2">Fator de Conversão de Compra</label>
+                                <div className="flex items-center gap-4">
+                                    <div className="flex-1">
+                                        <input 
+                                            type="number" 
+                                            step="0.5"
+                                            name="purchaseConversionFactor" 
+                                            value={formData.purchaseConversionFactor || 1} 
+                                            onChange={handleChange} 
+                                            className={inputStyle} 
+                                            placeholder="Ex: 12 (unidades por caixa)"
+                                        />
+                                    </div>
+                                    <div className="flex-1">
+                                        <p className="text-[10px] font-bold text-gray-400 leading-tight uppercase">
+                                            Indica quantas unidades vêm em uma embalagem de compra (caixa/fardo/saca).
+                                        </p>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -518,44 +557,6 @@ const ProductFormPage: React.FC<ProductFormPageProps> = ({ productId, categories
                     </div>
                 )}
 
-                {activeTab === 'inventory' && !productId && (
-                    <div className="space-y-6 animate-in fade-in slide-in-from-top-4 duration-300">
-                        <div className="p-4 bg-theme-primary/10 border-l-4 border-theme-primary text-theme-primary rounded-r-xl">
-                            <p className="text-xs font-bold uppercase tracking-tight flex items-center gap-2">
-                                <Boxes size={16}/> Registro de Primeiro Lote
-                            </p>
-                            <p className="text-[10px] font-medium mt-1">Obrigatorio informar a validade para produtos perecíveis ou naturais.</p>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div>
-                                <label className="block text-[10px] font-black text-gray-400 uppercase ml-1 mb-1">Referência do Lote</label>
-                                <input type="text" name="number" value={initialLot.number} onChange={handleInitialLotChange} className={inputStyle}/>
-                            </div>
-                            <div>
-                                <label className="block text-[10px] font-black text-gray-400 uppercase ml-1 mb-1">Vencimento do Lote</label>
-                                <input type="date" name="expirationDate" value={initialLot.expirationDate} onChange={handleInitialLotChange} className={inputStyle} required/>
-                            </div>
-                            <div>
-                                <label className="block text-[10px] font-black text-gray-400 uppercase ml-1 mb-1">Qtd em Estoque</label>
-                                <input type="number" name="initialStock" value={initialLot.initialStock} onChange={handleInitialLotChange} className={inputStyle} placeholder="0"/>
-                            </div>
-                            <div>
-                                <label className="block text-[10px] font-black text-gray-400 uppercase ml-1 mb-1">Custo de Aquisição (R$)</label>
-                                <div className="relative">
-                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">R$</span>
-                                    <input 
-                                        type="text" 
-                                        name="costPrice" 
-                                        value={formatCurrency(initialLot.costPrice)} 
-                                        onChange={handleInitialLotChange} 
-                                        className={inputStyle + " pl-10 font-mono"}
-                                    />
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
                 {activeTab === 'tax' && (
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                         <div>
@@ -574,9 +575,9 @@ const ProductFormPage: React.FC<ProductFormPageProps> = ({ productId, categories
                 )}
 
                 <div className="flex justify-end gap-3 pt-8 border-t dark:border-gray-700">
-                    <Button type="button" variant="secondary" className="px-8 rounded-2xl" onClick={onBack}>Sair sem Salvar</Button>
-                    <Button type="submit" variant="primary" className="px-10 rounded-2xl shadow-lg shadow-theme-primary/30">
-                        <Save size={18} className="mr-2"/> Confirmar Cadastro
+                    <Button type="button" variant="secondary" className="px-8 rounded-2xl" onClick={onBack} disabled={isSubmitting}>Sair sem Salvar</Button>
+                    <Button type="submit" variant="primary" className="px-10 rounded-2xl shadow-lg shadow-theme-primary/30" isLoading={isSubmitting}>
+                        <Save size={18} className="mr-2"/> {isSubmitting ? 'Salvando...' : 'Confirmar Cadastro'}
                     </Button>
                 </div>
             </form>

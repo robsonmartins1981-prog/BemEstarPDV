@@ -1,19 +1,21 @@
 import React from 'react';
 import Modal from '../shared/Modal';
 import Button from '../shared/Button';
-import { Sale } from '../../types';
+import { Sale, AppConfig } from '../../types';
 import { formatCurrency } from '../../utils/formatUtils';
+import { printReceipt } from '../../utils/printUtils';
 import { Printer, Download, Share2, CheckCircle2 } from 'lucide-react';
 
 interface FiscalReceiptProps {
   isOpen: boolean;
   onClose: () => void;
   sale: Sale;
+  config: AppConfig;
 }
 
-const FiscalReceipt: React.FC<FiscalReceiptProps> = ({ isOpen, onClose, sale }) => {
-  const handlePrint = () => {
-    window.print();
+const FiscalReceipt: React.FC<FiscalReceiptProps> = ({ isOpen, onClose, sale, config }) => {
+  const handlePrint = async () => {
+    await printReceipt(sale, config, true);
   };
 
   return (

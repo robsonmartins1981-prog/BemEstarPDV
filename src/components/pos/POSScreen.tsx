@@ -1,16 +1,12 @@
 
 import React, { useState, useCallback, useContext, useEffect, useMemo } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import type { SaleItem, Sale, Product, CashOperation, Payment, Customer, ParkedSale, Coupon } from '../../types';
+import type { SaleItem, Sale, Product, CashOperation, Payment, Customer, ParkedSale } from '../../types';
 import { formatCurrency, formatDecimal, parseCurrencyInput } from '../../utils/formatUtils';
 import { safeDate } from '../../utils/dateUtils';
-import { db } from '../../services/databaseService';
-import { sqliteStore } from '../../services/sqliteService';
+import { db, searchByIndex } from '../../services/databaseService';
 import { printReceipt } from '../../utils/printUtils';
 import { CashSessionContext } from '../../App';
-import { addToQueue } from '../../services/syncService'; 
-import { getActivePromotions, getPromotionalPrice } from '../../utils/promotionUtils';
-import type { Promotion } from '../../types';
 
 import ProductSearch from './ProductSearch';
 import Cart from './Cart';
@@ -36,20 +32,12 @@ const POSScreen: React.FC<POSScreenProps> = ({ setView }) => {
   const [activeSubView, setActiveSubView] = useState<'checkout' | 'parked' | 'today'>('checkout');
 
   const [cartItems, setCartItems] = useState<SaleItem[]>([]);
-  const [activePromotions, setActivePromotions] = useState<Promotion[]>([]);
-
-  useEffect(() => {
-    getActivePromotions().then(setActivePromotions);
-  }, [activeSubView]);
 
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [includeCpf, setIncludeCpf] = useState(false);
   const [cpf, setCpf] = useState('');
   const [cpfError, setCpfError] = useState('');
 
-  const [couponCodeInput, setCouponCodeInput] = useState('');
-  const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(null);
-  const [couponMessage, setCouponMessage] = useState({ type: '', text: '' });
   const [manualDiscount, setManualDiscount] = useState<{ type: 'PERCENTAGE' | 'FIXED_AMOUNT' | null; value: number }>({ type: null, value: 0 });
   const [percentageDiscountInput, setPercentageDiscountInput] = useState('');
   const [fixedDiscountInput, setFixedDiscountInput] = useState('');
@@ -124,46 +112,37 @@ const POSScreen: React.FC<POSScreenProps> = ({ setView }) => {
       }
       return Math.min(subtotal, manualDiscount.value);
     }
-    if (appliedCoupon) {
-      if (appliedCoupon.type === 'PERCENTAGE') {
-        return subtotal * (appliedCoupon.value / 100);
-      }
-      return Math.min(subtotal, appliedCoupon.value);
-    }
     return 0;
-  }, [subtotal, manualDiscount, appliedCoupon]);
+  }, [subtotal, manualDiscount]);
 
   const total = subtotal - calculatedDiscount;
 
   const clearSaleState = () => {
     setCartItems([]);
     setSelectedCustomer(null); 
-    setCouponCodeInput('');
-    setAppliedCoupon(null);
-    setCouponMessage({ type: '', text: '' });
     handleRemoveManualDiscount();
   };
   
   const handleAddProduct = useCallback((product: Product, quantity: number) => {
     if (!product || !product.id) return;
-    const promoPrice = getPromotionalPrice(product, activePromotions);
+    const unitPrice = product.price;
     
     setCartItems(prevItems => {
       const items = (prevItems || []).filter(Boolean);
       const existingItem = items.find(item => item.productId === product.id);
       if (existingItem) {
         return items.map(item =>
-          item.productId === product.id ? { ...item, quantity: item.quantity + quantity, total: (item.quantity + quantity) * promoPrice - item.discount } : item
+          item.productId === product.id ? { ...item, quantity: item.quantity + quantity, total: (item.quantity + quantity) * unitPrice - item.discount } : item
         );
       } else {
         const newItem: SaleItem = {
           productId: product.id, productName: product.name, productImage: product.image,
-          unitPrice: promoPrice, quantity: quantity, unitType: product.unitType || 'UN', discount: 0, total: promoPrice * quantity,
+          unitPrice: unitPrice, quantity: quantity, unitType: product.unitType || 'UN', discount: 0, total: unitPrice * quantity,
         };
         return [...items, newItem];
       }
     });
-  }, [activePromotions]);
+  }, []);
 
   const handleProductSelect = useCallback((product: Product) => {
     handleAddProduct(product, 1);
@@ -176,35 +155,6 @@ const POSScreen: React.FC<POSScreenProps> = ({ setView }) => {
   const handleUpdateDiscount = useCallback((productId: string, newDiscount: number) => { 
     setCartItems(prev => (prev || []).filter(Boolean).map(item => item.productId === productId ? { ...item, discount: newDiscount, total: item.quantity * item.unitPrice - newDiscount } : item));
   }, []);
-
-  const handleApplyCoupon = async () => {
-    if (!couponCodeInput.trim()) return;
-    setCouponMessage({ type: '', text: '' });
-    
-    const code = couponCodeInput.trim().toUpperCase();
-    const coupon = await db.getFromIndex('coupons', 'code', code);
-    
-    if (!coupon) { setCouponMessage({ type: 'error', text: 'Cupom inválido.' }); return; }
-    if (coupon.isActive === 0) { setCouponMessage({ type: 'error', text: 'Cupom inativo.' }); return; }
-    
-    const expiryDate = safeDate(coupon.expiryDate);
-    if (expiryDate && new Date() > expiryDate) { 
-      setCouponMessage({ type: 'error', text: 'Cupom expirado.' }); 
-      return; 
-    }
-    
-    if (coupon.currentUses >= coupon.maxUses) { setCouponMessage({ type: 'error', text: 'Limite de usos atingido.' }); return; }
-
-    setAppliedCoupon(coupon);
-    handleRemoveManualDiscount(); 
-    setCouponMessage({ type: 'success', text: 'Cupom aplicado!' });
-  };
-
-  const handleRemoveCoupon = () => {
-    setAppliedCoupon(null);
-    setCouponCodeInput('');
-    setCouponMessage({ type: '', text: '' });
-  };
 
   const handlePercentageDiscountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -219,7 +169,6 @@ const POSScreen: React.FC<POSScreenProps> = ({ setView }) => {
     const numericValue = parseFloat(value);
     if (!isNaN(numericValue) && numericValue >= 0) {
         setManualDiscount({ type: 'PERCENTAGE', value: numericValue });
-        setAppliedCoupon(null); setCouponMessage({ type: '', text: '' }); setCouponCodeInput(''); 
     }
   };
 
@@ -236,7 +185,6 @@ const POSScreen: React.FC<POSScreenProps> = ({ setView }) => {
     const numericValue = parseFloat(value.replace(',', '.'));
     if (!isNaN(numericValue) && numericValue >= 0) {
         setManualDiscount({ type: 'FIXED_AMOUNT', value: numericValue });
-        setAppliedCoupon(null); setCouponMessage({ type: '', text: '' }); setCouponCodeInput(''); 
     }
   };
 
@@ -254,8 +202,6 @@ const POSScreen: React.FC<POSScreenProps> = ({ setView }) => {
       totalDiscount: calculatedDiscount, totalAmount: total, payments, change,
       customerCPF: includeCpf ? cpf : undefined, customerId: selectedCustomer?.id,
       sessionId: session.id,
-      isSynced: false,
-      couponCodeApplied: appliedCoupon?.code,
       manualDiscountType: manualDiscount.type ?? undefined,
       manualDiscountValue: manualDiscount.value || undefined,
     };
@@ -266,34 +212,15 @@ const POSScreen: React.FC<POSScreenProps> = ({ setView }) => {
       }
     }
 
-    const tx = db.transaction(['cashSessions', 'coupons', 'sales'], 'readwrite');
+    const tx = db.transaction(['cashSessions', 'sales'], 'readwrite');
     
     const updatedSession = { ...session, sales: [...(session.sales || []), newSale] };
-    // Usamos put() em vez de add() para maior resiliência em falhas de transação
     await tx.objectStore('cashSessions').put(updatedSession);
     await tx.objectStore('sales').put(newSale); 
-    
-    // Salva no SQLite em paralelo (se disponível)
-    try {
-      await sqliteStore.saveSale(newSale);
-    } catch (e) {
-      console.error('[SQLite] Erro ao salvar venda:', e);
-    }
-    
-    if (appliedCoupon) {
-      const couponStore = tx.objectStore('coupons');
-      const couponToUpdate = await couponStore.get(appliedCoupon.id);
-      if (couponToUpdate) {
-        couponToUpdate.currentUses += 1;
-        await couponStore.put(couponToUpdate);
-      }
-    }
     
     await tx.done;
     setSession(updatedSession);
     
-    addToQueue('FISCAL_EMISSION', { saleId: newSale.id });
-
     clearSaleState();
     setIsPaymentView(false);
     
@@ -301,7 +228,7 @@ const POSScreen: React.FC<POSScreenProps> = ({ setView }) => {
       setLastSale(newSale);
       setReceiptModalOpen(true);
     }
-  }, [cartItems, session, setSession, subtotal, total, calculatedDiscount, selectedCustomer, includeCpf, cpf, appliedCoupon, manualDiscount, appConfig]);
+  }, [cartItems, session, setSession, subtotal, total, calculatedDiscount, selectedCustomer, includeCpf, cpf, manualDiscount, appConfig]);
   
   const handleConfirmParkSale = async (parkedSale: ParkedSale) => {
     await db.put('parkedSales', parkedSale);
@@ -338,11 +265,9 @@ const POSScreen: React.FC<POSScreenProps> = ({ setView }) => {
       payments: sale.payments, 
       change: change,
       customerId: sale.customerId,
-      isSynced: false,
       type: sale.type,
       deliveryAddress: sale.deliveryAddress,
       deliveryFee: sale.deliveryFee,
-      neighborhood: sale.neighborhood,
       contactPhone: sale.contactPhone,
       notes: sale.notes
     };
@@ -352,25 +277,16 @@ const POSScreen: React.FC<POSScreenProps> = ({ setView }) => {
     await tx.objectStore('sales').put(newSale); 
     await tx.objectStore('parkedSales').delete(sale.id);
     
-    // Salva no SQLite em paralelo (se disponível)
-    try {
-      await sqliteStore.saveSale(newSale);
-    } catch (e) {
-      console.error('[SQLite] Erro ao salvar venda de entrega:', e);
-    }
-    
     await tx.done;
     setSession(updatedSession);
-    
-    addToQueue('FISCAL_EMISSION', { saleId: newSale.id });
   }, [session, setSession]);
 
   const handleCashOperation = useCallback(async (operation: any) => {
     if (!session) return;
     
-    // Buscar a sessão real no banco
-    const allSessions = await db.getAll('cashSessions');
-    const realSession = (allSessions || []).find(s => s.status === 'OPEN');
+    // Buscar a sessão real no banco usando o índice de status
+    const openSessions = await searchByIndex('cashSessions', 'status', 'OPEN');
+    const realSession = openSessions[0];
     
     if (!realSession) return;
 
@@ -651,7 +567,6 @@ const POSScreen: React.FC<POSScreenProps> = ({ setView }) => {
                                 value={percentageDiscountInput}
                                 onChange={handlePercentageDiscountChange}
                                 onBlur={() => { if(percentageDiscountInput) setPercentageDiscountInput(parseFloat(percentageDiscountInput).toString()) }}
-                                disabled={!!appliedCoupon}
                                 className="w-full text-right pl-7 pr-2 py-1.5 border rounded-md text-sm dark:bg-gray-700 dark:border-gray-600 disabled:bg-gray-200 dark:disabled:bg-gray-800"
                             />
                         </div>
@@ -662,22 +577,10 @@ const POSScreen: React.FC<POSScreenProps> = ({ setView }) => {
                                 placeholder="R$"
                                 value={fixedDiscountInput}
                                 onChange={handleFixedDiscountChange}
-                                disabled={!!appliedCoupon}
                                 className="w-full text-right pl-7 pr-2 py-1.5 border rounded-md text-sm dark:bg-gray-700 dark:border-gray-600 disabled:bg-gray-200 dark:disabled:bg-gray-800"
                             />
                         </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                        <input type="text" value={couponCodeInput} onChange={e => setCouponCodeInput(e.target.value)} placeholder="Cód. Cupom" className="flex-grow px-3 py-1.5 border rounded-md text-sm dark:bg-gray-700 dark:border-gray-600" disabled={!!manualDiscount.type} />
-                        <Button size="sm" onClick={handleApplyCoupon} disabled={!!manualDiscount.type || !couponCodeInput} className="text-xs">Aplicar</Button>
-                    </div>
-                    {couponMessage.text && <p className={`text-xs ${couponMessage.type === 'error' ? 'text-red-500' : 'text-green-600'}`}>{couponMessage.text}</p>}
-                    {appliedCoupon && (
-                        <div className="flex items-center justify-between p-2 bg-theme-secondary/10 text-theme-secondary rounded-md text-sm font-semibold">
-                           <span><Ticket size={14} className="inline mr-1"/> {appliedCoupon.code}</span>
-                           <button onClick={handleRemoveCoupon}><XCircle size={16}/></button>
-                        </div>
-                    )}
                 </div>
 
               <div className="space-y-1 md:space-y-3 text-lg flex-grow">
@@ -777,6 +680,7 @@ const POSScreen: React.FC<POSScreenProps> = ({ setView }) => {
           isOpen={isReceiptModalOpen} 
           onClose={() => setReceiptModalOpen(false)} 
           sale={lastSale} 
+          config={appConfig}
         />
       )}
     </div>
