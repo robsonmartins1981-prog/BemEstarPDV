@@ -141,7 +141,20 @@ const SettingsScreen: React.FC = () => {
   };
 
   const handleSelectDbPath = async () => {
-    alert('Esta funcionalidade está disponível apenas na versão desktop instalada.');
+    if ((window as any).require) {
+      try {
+        const { ipcRenderer } = (window as any).require('electron');
+        const path = await ipcRenderer.invoke('select-directory');
+        if (path) {
+          setConfig(prev => prev ? { ...prev, localDatabasePath: path } : null);
+        }
+      } catch (error) {
+        console.error('Erro ao selecionar diretório:', error);
+        alert('Erro ao abrir seletor de pastas.');
+      }
+    } else {
+      alert('Esta funcionalidade está disponível apenas na versão desktop instalada.');
+    }
   };
 
   const handleClearData = async () => {
